@@ -24,7 +24,8 @@ app.get('/api/menu', (req, res) => {
   res.json(menu);
 });
 
-// Валидация тела заказа, приходящего из Telegram Mini App
+// Валидация тела заказа. Поддерживает как текущий формат фронтенда
+// (lines/totalMonthlyPrice/...), так и прежний формат (days/meals/...)
 function validateOrder(body) {
   const errors = [];
 
@@ -32,60 +33,82 @@ function validateOrder(body) {
     return ['Тело запроса отсутствует или имеет неверный формат'];
   }
 
-  if (!Array.isArray(body.days) || body.days.length === 0) {
-    errors.push('Поле "days" обязательно и должно быть непустым массивом');
+  const hasLines = Array.isArray(body.lines) && body.lines.length > 0;
+  const hasLegacyItems = Array.isArray(body.days) && body.days.length > 0
+    && Array.isArray(body.meals) && body.meals.length > 0;
+
+  if (!hasLines && !hasLegacyItems) {
+    errors.push('Необходимо передать непустой массив "lines" либо оба поля "days" и "meals"');
   }
 
-  if (!Array.isArray(body.meals) || body.meals.length === 0) {
-    errors.push('Поле "meals" обязательно и должно быть непустым массивом');
+  if (body.totalMonthlyPrice === undefined && body.totalPrice === undefined) {
+    errors.push('Необходимо указать "totalMonthlyPrice" или "totalPrice"');
+  }
+
+  if (body.lines !== undefined && !Array.isArray(body.lines)) {
+    errors.push('Поле "lines" должно быть массивом');
   }
 
   if (body.beverages !== undefined && !Array.isArray(body.beverages)) {
     errors.push('Поле "beverages" должно быть массивом');
   }
 
-  if (typeof body.portions !== 'number' || !Number.isFinite(body.portions)) {
-    errors.push('Поле "portions" обязательно и должно быть числом');
-  }
-
-  if (typeof body.employeeCount !== 'number' || !Number.isFinite(body.employeeCount)) {
-    errors.push('Поле "employeeCount" обязательно и должно быть числом');
-  }
-
-  if (typeof body.totalPrice !== 'number' || !Number.isFinite(body.totalPrice)) {
-    errors.push('Поле "totalPrice" обязательно и должно быть числом');
-  }
+  // Числовые поля проверяются, только если они присутствуют
+  ['totalMonthlyPrice', 'totalPrice', 'employeeCount', 'workDaysCount', 'portions'].forEach((field) => {
+    if (body[field] !== undefined && (typeof body[field] !== 'number' || !Number.isFinite(body[field]))) {
+      errors.push(`Поле "${field}" должно быть числом`);
+    }
+  });
 
   return errors;
 }
 
-// Формирование читаемого чека для Telegram
+// Формирование читаемого чека для Telegram.
+// Поддерживает текущий формат фронтенда (lines/totalMonthlyPrice/...)
+// и прежний формат (days/meals/totalPrice).
 function formatReceipt(order) {
   const dateTime = new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' });
-  const meals = order.meals.map((m) => (typeof m === 'string' ? m : m.name)).join(', ');
-  const beverages = Array.isArray(order.beverages) && order.beverages.length > 0
-    ? order.beverages.map((b) => (typeof b === 'string' ? b : b.name)).join(', ')
-    : 'не выбраны';
+  const out = ['🍱 *Новый заказ Lunchistan*', `🕒 ${dateTime}`, ''];
 
-  const lines = [
-    '🍱 *Новый заказ Lunchistan*',
-    `🕒 ${dateTime}`,
-    '',
-    `📅 Дни: ${order.days.join(', ')}`,
-    `🍽 Блюда: ${meals}`,
-    `🥤 Напитки: ${beverages}`,
-    `📦 Порций: ${order.portions}`,
-    `👥 Сотрудников: ${order.employeeCount}`,
-    `💰 Итого: ${order.totalPrice.toLocaleString('ru-RU')} UZS`,
-  ];
+  if (Array.isArray(order.lines) && order.lines.length > 0) {
+    out.push('🧾 Состав заказа:');
+    order.lines.forEach((item) => {
+      const name = item.name || item.title || item.mealName || 'Позиция';
+      const parts = [`• ${name}`];
+      if (item.day) parts.push(`(${item.day})`);
+      if (item.quantity !== undefined) parts.push(`x${item.quantity}`);
+      if (typeof item.unitPrice === 'number') parts.push(`— ${item.unitPrice.toLocaleString('ru-RU')} UZS/шт`);
+      const lineTotal = item.total ?? item.lineTotal;
+      if (typeof lineTotal === 'number') parts.push(`= ${lineTotal.toLocaleString('ru-RU')} UZS`);
+      out.push(parts.join(' '));
+    });
+  } else {
+    const meals = order.meals.map((m) => (typeof m === 'string' ? m : m.name)).join(', ');
+    out.push(`📅 Дни: ${order.days.join(', ')}`, `🍽 Блюда: ${meals}`);
+  }
 
-  if (order.customerName) lines.push(`👤 Клиент: ${order.customerName}`);
-  if (order.phone) lines.push(`📞 Телефон: ${order.phone}`);
-  if (order.comment) lines.push(`💬 Комментарий: ${order.comment}`);
+  if (Array.isArray(order.beverages) && order.beverages.length > 0) {
+    out.push(`🥤 Напитки: ${order.beverages.map((b) => (typeof b === 'string' ? b : b.name)).join(', ')}`);
+  }
 
-  lines.push('', '✅ Заказ принят в обработку');
+  if (order.activeDays !== undefined) {
+    out.push(`📅 Активные дни: ${Array.isArray(order.activeDays) ? order.activeDays.join(', ') : order.activeDays}`);
+  }
+  if (order.workDaysCount !== undefined) out.push(`📆 Рабочих дней: ${order.workDaysCount}`);
+  if (order.portions !== undefined) out.push(`📦 Порций: ${order.portions}`);
+  if (order.employeeCount !== undefined) out.push(`👥 Сотрудников: ${order.employeeCount}`);
+  if (order.paymentMethod) out.push(`💳 Способ оплаты: ${order.paymentMethod}`);
 
-  return lines.join('\n');
+  const total = order.totalMonthlyPrice ?? order.totalPrice;
+  if (total !== undefined) out.push(`💰 Итого: ${total.toLocaleString('ru-RU')} UZS`);
+
+  if (order.customerName) out.push(`👤 Клиент: ${order.customerName}`);
+  if (order.phone) out.push(`📞 Телефон: ${order.phone}`);
+  if (order.comment) out.push(`💬 Комментарий: ${order.comment}`);
+
+  out.push('', '✅ Заказ принят в обработку');
+
+  return out.join('\n');
 }
 
 // Отправка чека через Telegram Bot API
