@@ -53,6 +53,30 @@ function validateOrder(body) {
     errors.push('Поле "beverages" должно быть массивом');
   }
 
+  if (hasLines) {
+    let hasInvalidLine = false;
+    let missingMainDish = false;
+    let missingSalad = false;
+    let missingBeverage = false;
+
+    const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+
+    body.lines.forEach((line) => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) {
+        hasInvalidLine = true;
+        return;
+      }
+      if (!isNonEmptyString(line.mainDish)) missingMainDish = true;
+      if (!isNonEmptyString(line.salad)) missingSalad = true;
+      if (!isNonEmptyString(line.beverage)) missingBeverage = true;
+    });
+
+    if (hasInvalidLine) errors.push('Некорректная структура заказа.');
+    if (missingMainDish) errors.push('Не выбрано основное блюдо для одного или нескольких дней.');
+    if (missingSalad) errors.push('Не выбран салат для одного или нескольких дней.');
+    if (missingBeverage) errors.push('Не выбран напиток для одного или нескольких дней.');
+  }
+
   // Числовые поля проверяются, только если они присутствуют
   ['totalMonthlyPrice', 'totalPrice', 'employeeCount', 'workDaysCount', 'portions'].forEach((field) => {
     if (body[field] !== undefined && (typeof body[field] !== 'number' || !Number.isFinite(body[field]))) {
@@ -73,14 +97,16 @@ function formatReceipt(order) {
   if (Array.isArray(order.lines) && order.lines.length > 0) {
     out.push('🧾 Состав заказа:');
     order.lines.forEach((item) => {
-      const name = item.name || item.title || item.mealName || 'Позиция';
-      const parts = [`• ${name}`];
-      if (item.day) parts.push(`(${item.day})`);
+      out.push(`• ${item.day || 'День'}`);
+      out.push(`  🥩 Основное: ${item.mainDish}`);
+      out.push(`  🥗 Салат: ${item.salad}`);
+      out.push(`  🥤 Напиток: ${item.beverage}`);
+      const parts = [];
       if (item.quantity !== undefined) parts.push(`x${item.quantity}`);
       if (typeof item.unitPrice === 'number') parts.push(`— ${item.unitPrice.toLocaleString('ru-RU')} UZS/шт`);
       const lineTotal = item.total ?? item.lineTotal;
       if (typeof lineTotal === 'number') parts.push(`= ${lineTotal.toLocaleString('ru-RU')} UZS`);
-      out.push(parts.join(' '));
+      if (parts.length > 0) out.push(`  ${parts.join(' ')}`);
     });
   } else {
     const meals = order.meals.map((m) => (typeof m === 'string' ? m : m.name)).join(', ');
