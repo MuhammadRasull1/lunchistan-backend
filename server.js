@@ -24,8 +24,19 @@ app.get('/api/menu', (req, res) => {
   res.json(menu);
 });
 
-// Валидация тела заказа. Поддерживает как текущий формат фронтенда
-// (lines/totalMonthlyPrice/...), так и прежний формат (days/meals/...)
+const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+
+function isDateString(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// Валидация тела заказа. Поддерживает:
+// 1. текущий формат фронтенда (lines/totalMonthlyPrice/...);
+// 2. новый формат дней (days: [{date, mainDish, salad, beverage}] / totalMonthlyPrice);
+// 3. прежний формат (days: строки-даты + meals + totalPrice).
 function validateOrder(body) {
   const errors = [];
 
@@ -33,12 +44,20 @@ function validateOrder(body) {
     return ['Тело запроса отсутствует или имеет неверный формат'];
   }
 
+  const hasDaysArray = Array.isArray(body.days);
+  const hasNewDays = hasDaysArray && body.days.length > 0
+    && body.days.every((d) => d !== null && typeof d === 'object' && !Array.isArray(d));
+  const hasLegacyDays = hasDaysArray && body.days.length > 0
+    && body.days.every((d) => typeof d === 'string');
   const hasLines = Array.isArray(body.lines) && body.lines.length > 0;
-  const hasLegacyItems = Array.isArray(body.days) && body.days.length > 0
-    && Array.isArray(body.meals) && body.meals.length > 0;
+  const hasLegacyItems = hasLegacyDays && Array.isArray(body.meals) && body.meals.length > 0;
 
-  if (!hasLines && !hasLegacyItems) {
-    errors.push('Необходимо передать непустой массив "lines" либо оба поля "days" и "meals"');
+  if (body.days !== undefined && !hasDaysArray) {
+    errors.push('Поле "days" должно быть массивом');
+  }
+
+  if (!hasLines && !hasNewDays && !hasLegacyItems) {
+    errors.push('Необходимо передать непустой массив "lines", либо массив "days" (объекты с "date"), либо оба поля "days" и "meals"');
   }
 
   if (body.totalMonthlyPrice === undefined && body.totalPrice === undefined) {
@@ -59,8 +78,6 @@ function validateOrder(body) {
     let missingSalad = false;
     let missingBeverage = false;
 
-    const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
-
     body.lines.forEach((line) => {
       if (!line || typeof line !== 'object' || Array.isArray(line)) {
         hasInvalidLine = true;
@@ -72,6 +89,44 @@ function validateOrder(body) {
     });
 
     if (hasInvalidLine) errors.push('Некорректная структура заказа.');
+    if (missingMainDish) errors.push('Не выбрано основное блюдо для одного или нескольких дней.');
+    if (missingSalad) errors.push('Не выбран салат для одного или нескольких дней.');
+    if (missingBeverage) errors.push('Не выбран напиток для одного или нескольких дней.');
+  }
+
+  if (hasNewDays) {
+    let hasInvalidDay = false;
+    let missingDate = false;
+    let invalidDate = false;
+    let duplicateDate = false;
+    let missingMainDish = false;
+    let missingSalad = false;
+    let missingBeverage = false;
+    const seenDates = new Set();
+
+    body.days.forEach((day) => {
+      if (!day || typeof day !== 'object' || Array.isArray(day)) {
+        hasInvalidDay = true;
+        return;
+      }
+      if (!isNonEmptyString(day.date)) {
+        missingDate = true;
+      } else if (!isDateString(day.date)) {
+        invalidDate = true;
+      } else if (seenDates.has(day.date)) {
+        duplicateDate = true;
+      } else {
+        seenDates.add(day.date);
+      }
+      if (!isNonEmptyString(day.mainDish)) missingMainDish = true;
+      if (!isNonEmptyString(day.salad)) missingSalad = true;
+      if (!isNonEmptyString(day.beverage)) missingBeverage = true;
+    });
+
+    if (hasInvalidDay) errors.push('Некорректная структура дня.');
+    if (missingDate) errors.push('Не указана дата для одного или нескольких дней.');
+    if (invalidDate) errors.push('Дата должна быть в формате YYYY-MM-DD.');
+    if (duplicateDate) errors.push('Обнаружены дубликаты дат в поле "days".');
     if (missingMainDish) errors.push('Не выбрано основное блюдо для одного или нескольких дней.');
     if (missingSalad) errors.push('Не выбран салат для одного или нескольких дней.');
     if (missingBeverage) errors.push('Не выбран напиток для одного или нескольких дней.');
@@ -90,11 +145,26 @@ function validateOrder(body) {
 // Формирование читаемого чека для Telegram.
 // Поддерживает текущий формат фронтенда (lines/totalMonthlyPrice/...)
 // и прежний формат (days/meals/totalPrice).
+function formatDayDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+}
+
 function formatReceipt(order) {
   const dateTime = new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' });
   const out = ['🍱 *Новый заказ Lunchistan*', `🕒 ${dateTime}`, ''];
 
-  if (Array.isArray(order.lines) && order.lines.length > 0) {
+  if (Array.isArray(order.days) && order.days.length > 0
+    && order.days.every((d) => d !== null && typeof d === 'object' && !Array.isArray(d))) {
+    out.push('🧾 Состав заказа:');
+    order.days.forEach((day) => {
+      out.push(`📅 ${formatDayDate(day.date)}`);
+      out.push(`  🥩 Основное: ${day.mainDish}`);
+      out.push(`  🥗 Салат: ${day.salad}`);
+      out.push(`  🥤 Напиток: ${day.beverage}`);
+      if (order.employeeCount !== undefined) out.push(`  🔢 Порции: ${order.employeeCount}`);
+    });
+  } else if (Array.isArray(order.lines) && order.lines.length > 0) {
     out.push('🧾 Состав заказа:');
     order.lines.forEach((item) => {
       out.push(`• ${item.day || 'День'}`);
@@ -167,6 +237,11 @@ app.post('/api/orders', async (req, res) => {
 
   if (errors.length > 0) {
     return res.status(400).json({ error: 'Некорректные данные заказа', details: errors });
+  }
+
+  if (Array.isArray(order.days) && order.days.length > 0
+    && order.days.every((d) => d !== null && typeof d === 'object' && !Array.isArray(d))) {
+    order.workDaysCount = order.days.length;
   }
 
   const receipt = formatReceipt(order);
