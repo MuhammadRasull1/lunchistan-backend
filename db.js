@@ -1,106 +1,165 @@
-const { DatabaseSync } = require('node:sqlite');
+/**
+ * Слой доступа к данным. Один интерфейс — два драйвера:
+ *  - production: PostgreSQL (Neon) через `pg`, если задан DATABASE_URL;
+ *  - локально/дев: встроенный PGlite (Postgres в процессе Node), файл в ./.pglite.
+ *
+ * Диалект SQL одинаковый (Postgres), поэтому запросы в routes.* не зависят от драйвера.
+ */
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'lunchistan.db');
+const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+const SEED_SETS_PATH = path.join(__dirname, 'seed_sets.json');
 
-const db = new DatabaseSync(DB_PATH);
+let driver = null;          // { query(text, params), connect?(), end() }
+let kind = null;            // 'pg' | 'pglite'
+let readyPromise = null;
 
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
+async function build() {
+  const url = process.env.DATABASE_URL;
 
-  CREATE TABLE IF NOT EXISTS companies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
+  if (url) {
+    const { Pool } = require('pg');
+    const needSsl = !/localhost|127\.0\.0\.1/.test(url);
+    const pool = new Pool({
+      connectionString: url,
+      ssl: needSsl ? { rejectUnauthorized: false } : false,
+      max: Number(process.env.PG_POOL_MAX || 5),
+      idleTimeoutMillis: 30000,
+    });
+    kind = 'pg';
+    driver = {
+      query: (text, params) => pool.query(text, params),
+      exec: (sql) => pool.query(sql),           // многооператорный скрипт (simple protocol)
+      connect: () => pool.connect(),
+      end: () => pool.end(),
+    };
+  } else {
+    const { PGlite } = require('@electric-sql/pglite');
+    const dir = process.env.PGLITE_DIR || path.join(__dirname, '.pglite');
+    const pg = new PGlite(dir);
+    await pg.waitReady;
+    kind = 'pglite';
+    driver = {
+      query: (text, params) => pg.query(text, params || []),
+      exec: (sql) => pg.exec(sql),
+      connect: null,
+      end: () => pg.close(),
+    };
+  }
 
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    role TEXT NOT NULL CHECK (role IN ('admin','employee')),
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS sessions (
-    token TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS menu_sets (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    price INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS schedule (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    date TEXT NOT NULL,
-    PRIMARY KEY (user_id, date)
-  );
-
-  CREATE TABLE IF NOT EXISTS choices (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    date TEXT NOT NULL,
-    set_id INTEGER NOT NULL,
-    set_name TEXT NOT NULL,
-    set_price INTEGER NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, date)
-  );
-
-  CREATE TABLE IF NOT EXISTS confirmed_days (
-    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    date TEXT NOT NULL,
-    confirmed_by INTEGER NOT NULL REFERENCES users(id),
-    confirmed_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (company_id, date)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_schedule_user ON schedule(user_id);
-  CREATE INDEX IF NOT EXISTS idx_choices_user ON choices(user_id);
-  CREATE INDEX IF NOT EXISTS idx_confirmed_company ON confirmed_days(company_id);
-`);
-
-// Миграции: добавляем новые колонки к уже существующим таблицам (v2)
-const companyCols = db.prepare('PRAGMA table_info(companies)').all().map(c => c.name);
-if (!companyCols.includes('size')) {
-  db.exec('ALTER TABLE companies ADD COLUMN size INTEGER');
+  await migrate();
+  await seed();
+  console.log(`🗄  БД готова (${kind === 'pg' ? 'PostgreSQL / Neon' : 'PGlite (локально)'})`);
+  return driver;
 }
 
-if (fs.existsSync(path.join(__dirname, 'seed_sets.json'))) {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM menu_sets').get().c;
-  if (count === 0) {
-    const sets = JSON.parse(fs.readFileSync(path.join(__dirname, 'seed_sets.json'), 'utf8'));
-    const insert = db.prepare('INSERT INTO menu_sets (id, name, category, price) VALUES (?, ?, ?, ?)');
-    db.exec('BEGIN');
-    try {
-      for (const row of sets) insert.run(row.id, row.name, row.category, row.price);
-      db.exec('COMMIT');
-    } catch (err) {
-      db.exec('ROLLBACK');
-      throw err;
+function ready() {
+  if (!readyPromise) readyPromise = build();
+  return readyPromise;
+}
+
+async function migrate() {
+  await driver.exec(SCHEMA_SQL);
+}
+
+async function seed() {
+  // Меню
+  const { rows } = await driver.query('SELECT COUNT(*)::int AS c FROM menu_sets');
+  if (rows[0].c === 0 && fs.existsSync(SEED_SETS_PATH)) {
+    const sets = JSON.parse(fs.readFileSync(SEED_SETS_PATH, 'utf8'));
+    for (const s of sets) {
+      await driver.query(
+        'INSERT INTO menu_sets (id, name, category, price) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING',
+        [s.id, s.name, s.category, s.price],
+      );
     }
+    console.log(`🍱 Загружено меню: ${sets.length} сетов`);
+  }
+
+  // Аккаунт владельца (дядя). Данные — из env, чтобы не хранить в коде.
+  const phone = (process.env.OWNER_PHONE || '').trim();
+  const password = process.env.OWNER_PASSWORD || '';
+  if (phone && password) {
+    const existing = await driver.query('SELECT id FROM users WHERE role = $1 LIMIT 1', ['owner']);
+    if (existing.rows.length === 0) {
+      const { hashPassword } = require('./auth');
+      let company = (await driver.query("SELECT id FROM companies WHERE code = 'LUNCHISTAN'")).rows[0];
+      if (!company) {
+        company = (await driver.query(
+          "INSERT INTO companies (code, name) VALUES ('LUNCHISTAN', 'Lunchistan') RETURNING id",
+        )).rows[0];
+      }
+      await driver.query(
+        'INSERT INTO users (company_id, role, name, phone, password_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (phone) DO NOTHING',
+        [company.id, 'owner', process.env.OWNER_NAME || 'Владелец', phone, hashPassword(password)],
+      );
+      console.log(`👤 Создан аккаунт владельца: ${phone}`);
+    }
+  } else {
+    console.warn('⚠️  OWNER_PHONE / OWNER_PASSWORD не заданы — аккаунт владельца не создан');
   }
 }
 
-function getUserByPhone(phone) {
-  return db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
+// ── Публичный интерфейс ────────────────────────────────────────────
+async function query(text, params) {
+  await ready();
+  return driver.query(text, params);
 }
 
-function getUserById(id) {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+async function one(text, params) {
+  const res = await query(text, params);
+  return res.rows[0] || null;
 }
 
-function getCompanyById(id) {
-  return db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
+async function many(text, params) {
+  const res = await query(text, params);
+  return res.rows;
 }
 
-module.exports = { db, getUserByPhone, getUserById, getCompanyById };
+/** Транзакция. Колбэк получает { query, one, many } на «своём» соединении. */
+async function tx(fn) {
+  await ready();
+
+  if (kind === 'pg') {
+    const client = await driver.connect();
+    const scoped = wrapClient((t, p) => client.query(t, p));
+    try {
+      await client.query('BEGIN');
+      const result = await fn(scoped);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // PGlite — одно соединение, операции сериализованы
+  const scoped = wrapClient((t, p) => driver.query(t, p || []));
+  try {
+    await driver.query('BEGIN');
+    const result = await fn(scoped);
+    await driver.query('COMMIT');
+    return result;
+  } catch (err) {
+    await driver.query('ROLLBACK');
+    throw err;
+  }
+}
+
+function wrapClient(q) {
+  return {
+    query: q,
+    one: async (t, p) => (await q(t, p)).rows[0] || null,
+    many: async (t, p) => (await q(t, p)).rows,
+  };
+}
+
+async function close() {
+  if (driver) await driver.end();
+}
+
+module.exports = { ready, query, one, many, tx, close, get kind() { return kind; } };
