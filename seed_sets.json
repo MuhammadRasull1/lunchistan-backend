@@ -1,0 +1,338 @@
+[
+  {
+    "id": 1,
+    "name": "Аджахури с курицей",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 2,
+    "name": "Бефстроганов с рисом",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 3,
+    "name": "Биточки из курицы с рисом и овощами",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 4,
+    "name": "Деревенский с мясом и грибами",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 5,
+    "name": "Драники картофельные с соусом тар-тар",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 6,
+    "name": "Голубцы",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 7,
+    "name": "Говяжья котлета с пюре",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 8,
+    "name": "Гречка по-домашнему с курицей",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 9,
+    "name": "Гуль ханум с соусом",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 10,
+    "name": "Гуляш из говядины с гречкой",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 11,
+    "name": "Куриная грудка с овощами на пару",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 12,
+    "name": "Куриная грудка с сыром и булгуром с овощами",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 13,
+    "name": "Куриная котлета на пару с пюре",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 14,
+    "name": "Куриная котлета по-киевски",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 15,
+    "name": "Котлета по-киевски с пюре",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 16,
+    "name": "Куриная котлета с пюре",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 17,
+    "name": "Курица гриль с овощами",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 18,
+    "name": "Курица карри с рисом",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 19,
+    "name": "Курица по-азиатски с рисом",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 20,
+    "name": "Курица по-мексикански",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 21,
+    "name": "Курица с овощами и соусом айоли",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 22,
+    "name": "Курица терияки с рисом",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 23,
+    "name": "Люля-кебаб куриный с гречкой",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 24,
+    "name": "Макароны по-флотски",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 25,
+    "name": "Манты с говядиной",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 26,
+    "name": "Митболы с пюре",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 27,
+    "name": "Мясо по-французски",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 28,
+    "name": "Плов из говядины",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 29,
+    "name": "Жареные пельмени",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 30,
+    "name": "Жареный рис по-азиатски",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 31,
+    "name": "Жареный рис с овощами",
+    "category": "hot",
+    "price": 55000
+  },
+  {
+    "id": 32,
+    "name": "Баклажаны по-корейски",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 33,
+    "name": "Греческий салат",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 34,
+    "name": "Морковча",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 35,
+    "name": "Огурцы по-корейски",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 36,
+    "name": "Оливье с колбасой",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 37,
+    "name": "Оливье с мясом",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 38,
+    "name": "Весенний салат",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 39,
+    "name": "Винегрет",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 40,
+    "name": "Винегрет с капустой",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 41,
+    "name": "Витаминка",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 42,
+    "name": "Зелёный салат",
+    "category": "salad",
+    "price": 55000
+  },
+  {
+    "id": 43,
+    "name": "Гречка отварная",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 44,
+    "name": "Гречка с капустой",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 45,
+    "name": "Картофельное пюре",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 46,
+    "name": "Картофельные дольки с сыром",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 47,
+    "name": "Картофель с грибами",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 48,
+    "name": "Каша овсяная",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 49,
+    "name": "Каша рисовая",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 50,
+    "name": "Каша рисовая на кокосовом молоке",
+    "category": "side",
+    "price": 55000
+  },
+  {
+    "id": 51,
+    "name": "Бургер маззали",
+    "category": "fastfood",
+    "price": 55000
+  },
+  {
+    "id": 52,
+    "name": "Клаб-сэндвич с курицей",
+    "category": "fastfood",
+    "price": 55000
+  },
+  {
+    "id": 53,
+    "name": "Клаб-сэндвич с индейкой",
+    "category": "fastfood",
+    "price": 55000
+  },
+  {
+    "id": 54,
+    "name": "Домашняя баклажанная икра",
+    "category": "appetizer",
+    "price": 55000
+  },
+  {
+    "id": 55,
+    "name": "Долма",
+    "category": "appetizer",
+    "price": 55000
+  },
+  {
+    "id": 56,
+    "name": "Куриный бульон с лапшой",
+    "category": "soup",
+    "price": 55000
+  }
+]
