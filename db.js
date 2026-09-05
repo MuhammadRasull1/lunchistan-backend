@@ -69,6 +69,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_confirmed_company ON confirmed_days(company_id);
 `);
 
+// Миграции: добавляем новые колонки к уже существующим таблицам (v2)
+const companyCols = db.prepare('PRAGMA table_info(companies)').all().map(c => c.name);
+if (!companyCols.includes('size')) {
+  db.exec('ALTER TABLE companies ADD COLUMN size INTEGER');
+}
+
 if (fs.existsSync(path.join(__dirname, 'seed_sets.json'))) {
   const count = db.prepare('SELECT COUNT(*) AS c FROM menu_sets').get().c;
   if (count === 0) {

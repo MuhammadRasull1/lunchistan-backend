@@ -104,6 +104,7 @@ function publicUser(user, company) {
     companyId: user.company_id,
     companyName: company ? company.name : null,
     companyCode: company ? company.code : null,
+    companySize: company ? company.size : null,
   };
 }
 
@@ -196,7 +197,7 @@ function dayPlan(companyId, date) {
 function register(app) {
   // Регистрация: с companyCode — сотрудник в существующую компанию; без — создание компании + менеджер (admin).
   app.post('/api/auth/register', (req, res) => {
-    const { name, phone, password, companyName, companyCode } = req.body || {};
+    const { name, phone, password, companyName, companyCode, companySize } = req.body || {};
     if (!requireFields(res, { name, phone, password }, ['name', 'phone', 'password'])) return;
     if (password.length < MIN_PASSWORD) {
       return res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD} символов` });
@@ -209,11 +210,12 @@ function register(app) {
     let role = 'employee';
     if (companyCode) {
       company = companyByCode(companyCode);
-      if (!company) return res.status(400).json({ error: 'Неверный код компании' });
+      if (!company) return res.status(400).json({ error: 'Неверный код команды' });
     } else {
       if (!requireFields(res, { companyName }, ['companyName'])) return;
       const code = makeCompanyCode();
-      db.prepare('INSERT INTO companies (code, name) VALUES (?, ?)').run(code, companyName.trim());
+      const size = Number.isInteger(companySize) && companySize > 0 ? companySize : null;
+      db.prepare('INSERT INTO companies (code, name, size) VALUES (?, ?, ?)').run(code, companyName.trim(), size);
       company = getCompanyById(db.prepare('SELECT id FROM companies ORDER BY id DESC LIMIT 1').get().id);
       role = 'admin';
     }
