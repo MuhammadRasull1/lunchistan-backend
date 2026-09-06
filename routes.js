@@ -35,12 +35,15 @@ function register(app) {
   app.post('/api/auth/register', async (req, res, next) => {
     try {
       const { name, phone, password, companyName, companyCode, companySize } = req.body || {};
-      if (!requireFields(res, { name, phone, password }, ['name', 'phone', 'password'])) return;
+      if (!requireFields(res, { name, password }, ['name', 'password'])) return;
       if (password.length < MIN_PASSWORD) {
         return res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD} символов` });
       }
-      if (await db.one('SELECT 1 FROM users WHERE phone = $1', [String(phone).trim()])) {
-        return res.status(409).json({ error: 'Телефон уже зарегистрирован' });
+      const effectivePhone = phone && String(phone).trim()
+        ? String(phone).trim()
+        : `user_${crypto.randomBytes(8).toString('hex')}`;
+      if (await db.one('SELECT 1 FROM users WHERE phone = $1', [effectivePhone])) {
+        return res.status(409).json({ error: 'Пользователь уже зарегистрирован' });
       }
 
       let company;
@@ -61,7 +64,7 @@ function register(app) {
 
       const user = await db.one(
         'INSERT INTO users (company_id, role, name, phone, password_hash) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [company.id, role, name.trim(), String(phone).trim(), hashPassword(password)],
+        [company.id, role, name.trim(), effectivePhone, hashPassword(password)],
       );
       const token = await createSession(user.id);
       res.status(201).json({ token, user: publicUser(user, company) });
@@ -70,11 +73,24 @@ function register(app) {
 
   app.post('/api/auth/login', async (req, res, next) => {
     try {
-      const { phone, password } = req.body || {};
-      if (!requireFields(res, { phone, password }, ['phone', 'password'])) return;
-      const user = await db.one('SELECT * FROM users WHERE phone = $1', [String(phone).trim()]);
+      const { phone, name, password, companyCode } = req.body || {};
+      if (!requireFields(res, { password }, ['password'])) return;
+
+      let user = null;
+      if (phone && String(phone).trim()) {
+        user = await db.one('SELECT * FROM users WHERE phone = $1', [String(phone).trim()]);
+      } else if (name && String(name).trim()) {
+        const matches = await db.many('SELECT * FROM users WHERE name = $1', [String(name).trim()]);
+        if (matches.length === 1) {
+          user = matches[0];
+        } else if (matches.length > 1 && companyCode && String(companyCode).trim()) {
+          const company = await companyByCode(companyCode);
+          if (company) user = matches.find((m) => m.company_id === company.id) || null;
+        }
+      }
+
       if (!user || !verifyPassword(password, user.password_hash)) {
-        return res.status(401).json({ error: 'Неверный телефон или пароль' });
+        return res.status(401).json({ error: 'Неверное имя или пароль' });
       }
       const company = user.company_id ? await db.one('SELECT * FROM companies WHERE id = $1', [user.company_id]) : null;
       const token = await createSession(user.id);
