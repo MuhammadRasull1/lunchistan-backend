@@ -1,9 +1,13 @@
+// Получатель чека по умолчанию — владелец проекта (Mansurov).
+// Переопределяется через CHAT_ID в окружении (Render).
+const DEFAULT_RECEIPT_CHAT_ID = '6635199967';
+
 async function sendTelegramReceipt(message) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.CHAT_ID;
+  const chatId = process.env.CHAT_ID || DEFAULT_RECEIPT_CHAT_ID;
 
-  if (!token || !chatId) {
-    console.warn('⚠️ TELEGRAM_BOT_TOKEN или CHAT_ID не заданы — чек не отправлен');
+  if (!token) {
+    console.warn('⚠️ TELEGRAM_BOT_TOKEN не задан — чек не отправлен');
     return { ok: false, skipped: true };
   }
 

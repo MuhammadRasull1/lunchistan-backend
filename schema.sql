@@ -71,12 +71,18 @@ CREATE TABLE IF NOT EXISTS orders (
   company_name    TEXT,
   address         TEXT,
   comment         TEXT,
+  tg_user_id      BIGINT,           -- реальный Telegram ID клиента из TMA
+  tg_username     TEXT,             -- реальный @username клиента из TMA
   payment_method  TEXT CHECK (payment_method IN ('corporate','card','cash')),
   employee_count  INTEGER NOT NULL DEFAULT 1,
   total_amount    BIGINT NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Миграция для уже существующих БД: новые колонки TG-контакта в orders.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tg_user_id BIGINT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tg_username TEXT;
 
 CREATE TABLE IF NOT EXISTS order_lines (
   id          SERIAL PRIMARY KEY,

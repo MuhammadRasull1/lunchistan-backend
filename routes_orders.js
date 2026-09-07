@@ -57,6 +57,11 @@ function receiptText(order, lines) {
   if (order.company_name || order.contact_name) {
     out.push(`🏢 ${order.company_name || '—'}`);
     out.push(`👤 ${order.contact_name || '—'}${order.contact_phone ? ` · ${order.contact_phone}` : ''}`);
+    // Ссылка на реальный аккаунт Telegram: username → t.me, иначе прямой ID.
+    const tgLink = order.tg_username
+      ? `https://t.me/${order.tg_username.replace(/^@/, '')}`
+      : order.tg_user_id ? `tg://user?id=${order.tg_user_id}` : null;
+    if (tgLink) out.push(`✈️ ${tgLink}`);
     if (order.address) out.push(`📍 ${order.address}`);
     out.push('');
   }
@@ -86,6 +91,8 @@ async function orderWithLines(id) {
     companyName: order.company_name,
     contactName: order.contact_name,
     contactPhone: order.contact_phone,
+    tgUserId: order.tg_user_id,
+    tgUsername: order.tg_username,
     address: order.address,
     comment: order.comment,
     paymentMethod: order.payment_method,
@@ -145,8 +152,8 @@ function register(app) {
         const o = await t.one(
           `INSERT INTO orders
              (company_id, source, is_lead, status, contact_name, contact_phone, company_name,
-              address, comment, payment_method, employee_count, total_amount)
-           VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+              address, comment, tg_user_id, tg_username, payment_method, employee_count, total_amount)
+           VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
           [
             companyId,
             authed ? 'bulk' : 'lead',
@@ -156,6 +163,8 @@ function register(app) {
             companyName,
             nonEmpty(body.address) ? body.address.trim() : null,
             nonEmpty(body.comment) ? body.comment.trim() : null,
+            Number.isInteger(body.tgUserId) ? Math.abs(body.tgUserId) : null,
+            nonEmpty(body.tgUsername) ? body.tgUsername.trim().replace(/^@/, '') : null,
             paymentMethod,
             employeeCount,
             Math.round(totalAmount),
