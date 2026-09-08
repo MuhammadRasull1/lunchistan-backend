@@ -38,8 +38,7 @@ async function handleStart(chatId, user) {
     `👋 Привет, <b>${esc(name)}</b>!\n\n` +
     `Ты в <b>Lunchistan</b> — корпоративная доставка обедов 🍱\n\n` +
     `🧭 <b>Что я умею:</b>\n` +
-    `📦 /status — твои последние заказы\n` +
-    `🛟 /help — помощь по сервису\n\n` +
+    `📦 /status — твои последние заказы\n\n` +
     `🛒 Оформить заказ можно в мини-приложении 👇`,
     { reply_markup: menuButton() },
   );
@@ -74,17 +73,6 @@ async function handleStatus(chatId, tgUserId) {
   await send(chatId,
     `📋 <b>Мои заказы:</b>\n\n${lines.join('\n')}\n\n` +
     `ℹ️ Подробнее — в мини-приложении.`,
-    { reply_markup: menuButton() },
-  );
-}
-
-async function handleHelp(chatId) {
-  await send(chatId,
-    `🛟 <b>Помощь</b>\n\n` +
-    `🛒 Заказ блюд — через мини-приложение (кнопка ниже)\n` +
-    `📦 /status — мои последние заказы\n` +
-    `👋 /start — приветствие\n\n` +
-    `📬 Есть вопрос? Напиши: @${esc(process.env.MANAGER_USERNAME || 'mansurov_dev')}`,
     { reply_markup: menuButton() },
   );
 }
@@ -142,7 +130,6 @@ async function processUpdate(update) {
 
   if (text === '/start') return handleStart(chatId, msg.from);
   if (text === '/status') return handleStatus(chatId, tgUserId);
-  if (text === '/help') return handleHelp(chatId);
 }
 
 async function poll() {
