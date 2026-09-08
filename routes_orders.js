@@ -1,6 +1,7 @@
 /** Оптовые заказы (основной клиентский поток) + заявки-лиды с лендинга. */
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
+const { sendClientReceipt } = require('./bot');
 const { auth, optionalAuth } = require('./auth');
 const { isDateString, dateKey } = require('./lib');
 
@@ -195,6 +196,21 @@ function register(app) {
       } catch (err) {
         telegramSent = false;
         console.error('Telegram-чек не отправлен:', err.message);
+      }
+
+      // Чек клиенту в личку
+      if (order.tg_user_id) {
+        const clientReceipt = [
+          '✅ *Твой заказ Lunchistan принят!*',
+          '',
+          `🔖 №${order.number}`,
+          `📅 ${lines.map((l) => l.date).join(', ')}`,
+          `💰 ${Number(order.total_amount).toLocaleString('ru-RU')} UZS`,
+          '',
+          'Мы скоро свяжемся с тобой для подтверждения.',
+          'Статус заказа: /status',
+        ].join('\n');
+        sendClientReceipt(order.tg_user_id, clientReceipt).catch(() => {});
       }
 
       res.status(201).json({

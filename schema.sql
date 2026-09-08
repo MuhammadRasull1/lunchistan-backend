@@ -108,6 +108,14 @@ CREATE TABLE IF NOT EXISTS order_status_log (
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Напоминания о доставке клиенту в Telegram (за день, по одной на дату заказа).
+CREATE TABLE IF NOT EXISTS delivery_reminders (
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  date     DATE NOT NULL,
+  sent_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (order_id, date)
+);
+
 CREATE INDEX IF NOT EXISTS idx_schedule_user     ON schedule(user_id);
 CREATE INDEX IF NOT EXISTS idx_choices_user      ON choices(user_id);
 CREATE INDEX IF NOT EXISTS idx_choices_date      ON choices(date);

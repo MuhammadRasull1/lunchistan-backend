@@ -8,6 +8,7 @@ const { auth, verifyPassword, hashPassword, MIN_PASSWORD } = require('./auth');
 const { register: registerTeams } = require('./routes');
 const { register: registerOrders } = require('./routes_orders');
 const { register: registerOwner } = require('./routes_owner');
+const { startBot } = require('./bot');
 
 const app = express();
 app.use(cors());
@@ -64,6 +65,7 @@ app.use((err, req, res, _next) => {
 db.ready()
   .then(() => {
     app.listen(PORT, () => console.log(`🚀 Lunchistan backend на :${PORT}`));
+    startBot();
   })
   .catch((err) => {
     console.error('Не удалось инициализировать БД:', err);
