@@ -200,15 +200,16 @@ function register(app) {
 
       // Чек клиенту в личку
       if (order.tg_user_id) {
+        const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const clientReceipt = [
-          '✅ *Твой заказ Lunchistan принят!*',
+          '✅ <b>Твой заказ Lunchistan принят!</b>',
           '',
           `🔖 №${order.number}`,
-          `📅 ${lines.map((l) => l.date).join(', ')}`,
+          `📅 ${esc(lines.map((l) => l.date).join(', '))}`,
           `💰 ${Number(order.total_amount).toLocaleString('ru-RU')} UZS`,
           '',
-          'Мы скоро свяжемся с тобой для подтверждения.',
-          'Статус заказа: /status',
+          '🚚 Мы скоро свяжемся с тобой для подтверждения.',
+          '📦 Статус заказа: /status',
         ].join('\n');
         sendClientReceipt(order.tg_user_id, clientReceipt).catch(() => {});
       }

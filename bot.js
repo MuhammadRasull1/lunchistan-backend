@@ -1,6 +1,7 @@
 /**
  * Telegram-бот Lunchistan — личные чеки, статусы заказов, помощь.
  * Работает через long polling (нативный API, без фреймворков).
+ * Разметка — HTML (надёжнее Markdown): всё экранируется через esc().
  */
 const db = require('./db');
 
@@ -8,31 +9,39 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
 
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
 // ── Отправка сообщений ─────────────────────────────────────────────
 async function send(chatId, text, extra = {}) {
   if (!TOKEN) return;
-  await fetch(`${API}/sendMessage`, {
+  const res = await fetch(`${API}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', ...extra }),
-  }).catch((e) => console.error('bot send error:', e.message));
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...extra }),
+  }).catch((e) => { console.error('bot send error:', e.message); return null; });
+  if (res) {
+    const data = await res.json().catch(() => null);
+    if (data && !data.ok) console.error('Telegram API reply:', JSON.stringify(data).slice(0, 300));
+  }
 }
+
+const menuButton = () => JSON.stringify({
+  inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
+});
 
 // ── Хендлеры команд ────────────────────────────────────────────────
 async function handleStart(chatId, user) {
   const name = user?.first_name || 'друг';
   await send(chatId,
-    `Привет, ${name}! 👋\n\n` +
-    `Я бот *Lunchistan* — корпоративная доставка обедов.\n\n` +
-    `📌 *Что я умею:*\n` +
-    `/status — статус твоих заказов\n` +
-    `/help — помощь\n\n` +
-    `Оформить заказ можно в наше́м мини-приложении 👇`,
-    {
-      reply_markup: JSON.stringify({
-        inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
-      }),
-    },
+    `👋 Привет, <b>${esc(name)}</b>!\n\n` +
+    `Ты в <b>Lunchistan</b> — корпоративная доставка обедов 🍱\n\n` +
+    `🧭 <b>Что я умею:</b>\n` +
+    `📦 /status — твои последние заказы\n` +
+    `🛟 /help — помощь по сервису\n\n` +
+    `🛒 Оформить заказ можно в мини-приложении 👇`,
+    { reply_markup: menuButton() },
   );
 }
 
@@ -45,39 +54,45 @@ async function handleStatus(chatId, tgUserId) {
     [tgUserId],
   );
 
-  if (!rows.length) return send(chatId, 'У тебя пока нет заказов. Открой мини-приложение и сделай первый заказ.');
+  if (!rows.length) {
+    return send(chatId,
+      `📭 У тебя пока нет заказов.\n\n` +
+      `🛒 Загляни в меню и сделай первый заказ 👇`,
+      { reply_markup: menuButton() },
+    );
+  }
 
   const statusEmoji = { new: '🟡', confirmed: '🟢', delivered: '✅', cancelled: '❌' };
   const lines = rows.map((r) => {
     const num = `ORD-${String(r.id).padStart(4, '0')}`;
-    const status = statusEmoji[r.status] || '⚪';
+    const emoji = statusEmoji[r.status] || '⚪';
     const dt = new Date(r.created_at).toLocaleDateString('ru-RU', { timeZone: 'Asia/Tashkent' });
     const sum = Number(r.total_amount).toLocaleString('ru-RU');
-    return `${status} *${num}* — ${sum} UZS · ${dt}`;
+    return `${emoji} <b>${num}</b> — ${sum} UZS · ${dt}`;
   });
 
-  await send(chatId, `📋 *Мои заказы:*\n\n${lines.join('\n')}\n\nПодробнее — в мини-приложении.`);
+  await send(chatId,
+    `📋 <b>Мои заказы:</b>\n\n${lines.join('\n')}\n\n` +
+    `ℹ️ Подробнее — в мини-приложении.`,
+    { reply_markup: menuButton() },
+  );
 }
 
 async function handleHelp(chatId) {
   await send(chatId,
-    `ℹ️ *Помощь*\n\n` +
-    `• Оформление заказа — через мини-приложение (кнопка ниже)\n` +
-    `/status — мои последние заказы\n` +
-    `/start — перезапустить бота\n\n` +
-    `По вопросам: @${process.env.MANAGER_USERNAME || 'mansurov_dev'}`,
-    {
-      reply_markup: JSON.stringify({
-        inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
-      }),
-    },
+    `🛟 <b>Помощь</b>\n\n` +
+    `🛒 Заказ блюд — через мини-приложение (кнопка ниже)\n` +
+    `📦 /status — мои последние заказы\n` +
+    `👋 /start — приветствие\n\n` +
+    `📬 Есть вопрос? Напиши: @${esc(process.env.MANAGER_USERNAME || 'mansurov_dev')}`,
+    { reply_markup: menuButton() },
   );
 }
 
 // ── Рассылка чека клиенту ──────────────────────────────────────────
 async function sendClientReceipt(tgUserId, receiptText) {
   if (!tgUserId || !TOKEN) return;
-  await send(tgUserId, receiptText);
+  await send(tgUserId, receiptText, { reply_markup: menuButton() });
 }
 
 // ── Напоминание о доставке (за день) ───────────────────────────────
@@ -103,15 +118,11 @@ async function remindUpcoming() {
   for (const r of rows) {
     const sum = Number(r.total_amount).toLocaleString('ru-RU');
     await send(r.tg_user_id,
-      `🌤 Напоминаем: завтра у тебя доставка *Lunchistan*!\n\n` +
+      `🌤 <b>Напоминание</b>: завтра у тебя доставка <b>Lunchistan</b>! 🍱\n\n` +
       `🔖 №ORD-${String(r.id).padStart(4, '0')}\n` +
       `💰 ${sum} UZS\n\n` +
-      `Если планы изменились — напиши нам заранее. Хорошего дня!`,
-      {
-        reply_markup: JSON.stringify({
-          inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
-        }),
-      },
+      `Если планы изменились — напиши нам заранее. Хорошего дня! ✨`,
+      { reply_markup: menuButton() },
     );
     await db.query(
       'INSERT INTO delivery_reminders (order_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING',
