@@ -229,7 +229,7 @@ const o = await t.one(
       if (order.tg_user_id) {
         const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const clientReceipt = [
-          '✅ <b>Твой заказ Lunchistan принят!</b>',
+          '✅ <b>Ваш заказ Lunchistan принят!</b>',
           '',
           `🔖 №${order.number}`,
           `📅 ${esc(lines.map((l) => l.date).join(', '))}`,
@@ -244,7 +244,7 @@ const o = await t.one(
         }
         clientReceipt.push(
           '',
-          '🚚 Мы скоро свяжемся с тобой для подтверждения.',
+          '🚚 Мы скоро свяжемся с вами для подтверждения.',
           '📦 Статус заказа: /status',
         );
         sendClientReceipt(order.tg_user_id, clientReceipt.join('\n')).catch(() => {});

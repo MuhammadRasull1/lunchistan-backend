@@ -35,17 +35,17 @@ const menuButton = () => JSON.stringify({
 async function handleStart(chatId, user) {
   const name = user?.first_name || 'друг';
   await send(chatId,
-    `👋 Привет, <b>${esc(name)}</b>!\n\n` +
-    `Ты в <b>Lunchistan</b> — корпоративная доставка обедов 🍱\n\n` +
+    `👋 Здравствуйте, <b>${esc(name)}</b>!\n\n` +
+    `Вы в <b>Lunchistan</b> — корпоративная доставка обедов 🍱\n\n` +
     `🧭 <b>Что я умею:</b>\n` +
-    `📦 /status — твои последние заказы\n\n` +
+    `📦 /status — ваши последние заказы\n\n` +
     `🛒 Оформить заказ можно в мини-приложении 👇`,
     { reply_markup: menuButton() },
   );
 }
 
 async function handleStatus(chatId, tgUserId) {
-  if (!tgUserId) return send(chatId, '⚠️ Не удалось определить твой аккаунт.');
+  if (!tgUserId) return send(chatId, '⚠️ Не удалось определить ваш аккаунт.');
 
   const rows = await db.many(
     `SELECT id, status, total_amount, created_at
@@ -55,8 +55,8 @@ async function handleStatus(chatId, tgUserId) {
 
   if (!rows.length) {
     return send(chatId,
-      `📭 У тебя пока нет заказов.\n\n` +
-      `🛒 Загляни в меню и сделай первый заказ 👇`,
+      `📭 У вас пока нет заказов.\n\n` +
+      `🛒 Загляните в меню и сделайте первый заказ 👇`,
       { reply_markup: menuButton() },
     );
   }
@@ -106,10 +106,10 @@ async function remindUpcoming() {
   for (const r of rows) {
     const sum = Number(r.total_amount).toLocaleString('ru-RU');
     await send(r.tg_user_id,
-      `🌤 <b>Напоминание</b>: завтра у тебя доставка <b>Lunchistan</b>! 🍱\n\n` +
+      `🌤 <b>Напоминание</b>: завтра у вас доставка <b>Lunchistan</b>! 🍱\n\n` +
       `🔖 №ORD-${String(r.id).padStart(4, '0')}\n` +
       `💰 ${sum} UZS\n\n` +
-      `Если планы изменились — напиши нам заранее. Хорошего дня! ✨`,
+      `Если планы изменились — напишите нам заранее. Хорошего дня! ✨`,
       { reply_markup: menuButton() },
     );
     await db.query(
