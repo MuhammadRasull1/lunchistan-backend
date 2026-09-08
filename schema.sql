@@ -6,8 +6,17 @@ CREATE TABLE IF NOT EXISTS companies (
   code       TEXT NOT NULL UNIQUE,
   name       TEXT NOT NULL,
   size       INTEGER,
+  -- Координаты и адрес компании (доставка B2B — на завод/офис)
+  lat        DOUBLE PRECISION,
+  lon        DOUBLE PRECISION,
+  address    TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Миграция для существующих БД: поля доставки в companies.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS address TEXT;
 
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
@@ -70,6 +79,11 @@ CREATE TABLE IF NOT EXISTS orders (
   contact_phone   TEXT,
   company_name    TEXT,
   address         TEXT,
+  -- Доставка «до двери»: координаты и детали ориентира
+  dest_lat        DOUBLE PRECISION,
+  dest_lon        DOUBLE PRECISION,
+  dest_detail     TEXT,             -- подъезд/этаж/домофон/ориентир одной строкой
+  delivery_fee    BIGINT NOT NULL DEFAULT 0,
   comment         TEXT,
   tg_user_id      BIGINT,           -- реальный Telegram ID клиента из TMA
   tg_username     TEXT,             -- реальный @username клиента из TMA
@@ -80,9 +94,28 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Миграция для уже существующих БД: новые колонки TG-контакта в orders.
+-- Миграция для уже существующих БД: новые колонки TG-контакта и доставки в orders.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tg_user_id BIGINT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tg_username TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lat DOUBLE PRECISION;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lon DOUBLE PRECISION;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_detail TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_fee BIGINT NOT NULL DEFAULT 0;
+
+-- Зоны доставки (круги от кухни). Чистая математика — без внешних API карт.
+CREATE TABLE IF NOT EXISTS delivery_zones (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  center_lat  DOUBLE PRECISION NOT NULL,
+  center_lon  DOUBLE PRECISION NOT NULL,
+  radius_m    INTEGER NOT NULL,     -- радиус в метрах
+  price       BIGINT NOT NULL DEFAULT 0,
+  min_order   BIGINT NOT NULL DEFAULT 0,  -- бесплатно при заказе ≥ min_order
+  priority    INTEGER NOT NULL DEFAULT 100, -- меньше = главнее
+  active      BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_zones_active ON delivery_zones(active);
 
 CREATE TABLE IF NOT EXISTS order_lines (
   id          SERIAL PRIMARY KEY,

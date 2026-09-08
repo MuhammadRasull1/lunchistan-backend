@@ -8,6 +8,7 @@ const { auth, verifyPassword, hashPassword, MIN_PASSWORD } = require('./auth');
 const { register: registerTeams } = require('./routes');
 const { register: registerOrders } = require('./routes_orders');
 const { register: registerOwner } = require('./routes_owner');
+const { register: registerDelivery } = require('./routes_delivery');
 const { startBot } = require('./bot');
 
 const app = express();
@@ -47,6 +48,7 @@ app.post('/api/auth/password', auth, async (req, res, next) => {
 registerTeams(app);   // /api/auth/*, /api/me, /api/my/days*, /api/manager/*
 registerOrders(app);  // /api/orders, /api/my/orders*
 registerOwner(app);   // /api/owner/*
+registerDelivery(app);// /api/delivery/*, /api/my/address
 
 // Невалидный JSON
 app.use((err, req, res, next) => {

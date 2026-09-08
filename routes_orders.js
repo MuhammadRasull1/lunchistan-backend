@@ -4,6 +4,7 @@ const { sendTelegramReceipt } = require('./telegram');
 const { sendClientReceipt } = require('./bot');
 const { auth, optionalAuth } = require('./auth');
 const { isDateString, dateKey } = require('./lib');
+const { quote } = require('./logistics');
 
 const PAYMENT_METHODS = new Set(['corporate', 'card', 'cash']);
 const nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -63,7 +64,14 @@ function receiptText(order, lines) {
       ? `https://t.me/${order.tg_username.replace(/^@/, '')}`
       : order.tg_user_id ? `tg://user?id=${order.tg_user_id}` : null;
     if (tgLink) out.push(`✈️ ${tgLink}`);
-    if (order.address) out.push(`📍 ${order.address}`);
+    out.push('');
+  }
+  // Доставка «до двери»: адрес + детали + ссылка на карту
+  if (order.dest_lat != null && order.dest_lon != null) {
+    const mapUrl = `https://yandex.com/maps/?pt=${order.dest_lon},${order.dest_lat}&z=17&l=map`;
+    out.push(`🚚 Доставка: ${order.address || 'по координатам'}${order.dest_detail ? `\n   ${order.dest_detail}` : ''}`);
+    out.push(`🗺 ${mapUrl}`);
+    if (order.delivery_fee) out.push(`🚗 Доставка: ${Number(order.delivery_fee).toLocaleString('ru-RU')} UZS`);
     out.push('');
   }
   out.push('🧾 Состав:');
@@ -149,28 +157,47 @@ function register(app) {
         || lines.reduce((s, l) => s + (l.lineTotal || l.unitPrice * l.portions * employeeCount), 0);
       const paymentMethod = PAYMENT_METHODS.has(body.paymentMethod) ? body.paymentMethod : null;
 
+      // Доставка «до двери»: координаты + детали (подъезд/этаж/домофон/ориентир)
+      const destLat = typeof body.destLat === 'number' && Number.isFinite(body.destLat) ? body.destLat : null;
+      const destLon = typeof body.destLon === 'number' && Number.isFinite(body.destLon) ? body.destLon : null;
+      const destDetail = nonEmpty(body.destDetail) ? body.destDetail.trim().slice(0, 500) : null;
+
+      let deliveryQuote = null;
+      if (destLat != null && destLon != null) {
+        deliveryQuote = await quote(destLat, destLon, totalAmount);
+        if (!deliveryQuote.ok) {
+          return res.status(400).json({ error: 'Некорректные координаты доставки' });
+        }
+      }
+      const deliveryFee = deliveryQuote ? deliveryQuote.fee : 0;
+
       const order = await db.tx(async (t) => {
-        const o = await t.one(
-          `INSERT INTO orders
-             (company_id, source, is_lead, status, contact_name, contact_phone, company_name,
-              address, comment, tg_user_id, tg_username, payment_method, employee_count, total_amount)
-           VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-          [
-            companyId,
-            authed ? 'bulk' : 'lead',
-            !authed,
-            contactName,
-            contactPhone,
-            companyName,
-            nonEmpty(body.address) ? body.address.trim() : null,
-            nonEmpty(body.comment) ? body.comment.trim() : null,
-            Number.isInteger(body.tgUserId) ? Math.abs(body.tgUserId) : null,
-            nonEmpty(body.tgUsername) ? body.tgUsername.trim().replace(/^@/, '') : null,
-            paymentMethod,
-            employeeCount,
-            Math.round(totalAmount),
-          ],
-        );
+const o = await t.one(
+            `INSERT INTO orders
+               (company_id, source, is_lead, status, contact_name, contact_phone, company_name,
+                address, dest_lat, dest_lon, dest_detail, delivery_fee, comment, tg_user_id,
+                tg_username, payment_method, employee_count, total_amount)
+             VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+            [
+              companyId,
+              authed ? 'bulk' : 'lead',
+              !authed,
+              contactName,
+              contactPhone,
+              companyName,
+              nonEmpty(body.address) ? body.address.trim() : null,
+              destLat,
+              destLon,
+              destDetail,
+              deliveryFee,
+              nonEmpty(body.comment) ? body.comment.trim() : null,
+              Number.isInteger(body.tgUserId) ? Math.abs(body.tgUserId) : null,
+              nonEmpty(body.tgUsername) ? body.tgUsername.trim().replace(/^@/, '') : null,
+              paymentMethod,
+              employeeCount,
+              Math.round(totalAmount),
+            ],
+          );
         for (const l of lines) {
           await t.query(
             `INSERT INTO order_lines
@@ -207,11 +234,20 @@ function register(app) {
           `🔖 №${order.number}`,
           `📅 ${esc(lines.map((l) => l.date).join(', '))}`,
           `💰 ${Number(order.total_amount).toLocaleString('ru-RU')} UZS`,
+        ];
+        if (order.dest_lat != null) {
+          clientReceipt.push(`📍 ${esc(order.address || 'по координатам')}`);
+          if (order.dest_detail) clientReceipt.push(`🚪 ${esc(order.dest_detail)}`);
+        }
+        if (order.delivery_fee) {
+          clientReceipt.push(`🚗 Доставка: ${esc(Number(order.delivery_fee).toLocaleString('ru-RU'))} UZS`);
+        }
+        clientReceipt.push(
           '',
           '🚚 Мы скоро свяжемся с тобой для подтверждения.',
           '📦 Статус заказа: /status',
-        ].join('\n');
-        sendClientReceipt(order.tg_user_id, clientReceipt).catch(() => {});
+        );
+        sendClientReceipt(order.tg_user_id, clientReceipt.join('\n')).catch(() => {});
       }
 
       res.status(201).json({
@@ -221,6 +257,9 @@ function register(app) {
         status: order.status,
         isLead: order.is_lead,
         telegramSent,
+        deliveryFee,
+        deliveryZone: deliveryQuote ? deliveryQuote.zone : null,
+        totalWithDelivery: Math.round(totalAmount) + deliveryFee,
       });
     } catch (err) { next(err); }
   });

@@ -77,6 +77,24 @@ async function seed() {
     console.log(`🍱 Загружено меню: ${sets.length} сетов`);
   }
 
+  // Зоны доставки (круги от кухни). Заполняются только при пустой таблице.
+  const zones = await driver.query('SELECT COUNT(*)::int AS c FROM delivery_zones');
+  if (zones.rows[0].c === 0) {
+    const defaults = [
+      { name: 'Центр', center_lat: 41.3111, center_lon: 69.2797, radius_m: 3000, price: 10000, min_order: 0, priority: 1 },
+      { name: 'Город', center_lat: 41.3111, center_lon: 69.2797, radius_m: 8000, price: 15000, min_order: 0, priority: 2 },
+      { name: 'Пригород', center_lat: 41.3111, center_lon: 69.2797, radius_m: 15000, price: 25000, min_order: 0, priority: 3 },
+    ];
+    for (const z of defaults) {
+      await driver.query(
+        `INSERT INTO delivery_zones (name, center_lat, center_lon, radius_m, price, min_order, priority)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+        [z.name, z.center_lat, z.center_lon, z.radius_m, z.price, z.min_order, z.priority],
+      );
+    }
+    console.log('🚚 Зоны доставки: Центр / Город / Пригород');
+  }
+
   // Аккаунт владельца (дядя). Данные — из env, чтобы не хранить в коде.
   const phone = (process.env.OWNER_PHONE || '').trim();
   const password = process.env.OWNER_PASSWORD || '';
