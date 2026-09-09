@@ -11,6 +11,39 @@ const {
   todayTz, dayPlan,
 } = require('./lib');
 
+/**
+ * День уже подтверждён менеджером для этой компании? Подтверждённый день —
+ * снимок, отправленный на кухню в Telegram; расписание/выбор блюда после
+ * этого меняться не должны (см. ОШИБКИ.md — раньше это никак не проверялось).
+ */
+async function isDayConfirmed(companyId, date) {
+  if (!companyId) return false;
+  const row = await db.one('SELECT 1 FROM confirmed_days WHERE company_id = $1 AND date = $2', [companyId, date]);
+  return Boolean(row);
+}
+
+/**
+ * Простой rate-limit по IP без внешних зависимостей: код команды — 6 символов
+ * из 34-символьного алфавита, без throttling его можно перебрать роботом и
+ * "войти" сотрудником в чужую компанию (см. ОШИБКИ.md). Состояние в памяти
+ * процесса — сбрасывается при рестарте и не шарится между инстансами, для
+ * масштаба этого приложения (один Render-инстанс) этого достаточно.
+ */
+const authAttempts = new Map(); // ip -> число попыток в текущем окне
+const AUTH_WINDOW_MS = 5 * 60 * 1000;
+const AUTH_MAX_ATTEMPTS = 15;
+setInterval(() => authAttempts.clear(), AUTH_WINDOW_MS).unref();
+
+function authRateLimit(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const n = (authAttempts.get(ip) || 0) + 1;
+  authAttempts.set(ip, n);
+  if (n > AUTH_MAX_ATTEMPTS) {
+    return res.status(429).json({ error: 'Слишком много попыток входа/регистрации. Попробуйте через несколько минут.' });
+  }
+  next();
+}
+
 function requireFields(res, body, fields) {
   for (const f of fields) {
     if (!body || typeof body[f] !== 'string' || body[f].trim().length === 0) {
@@ -32,7 +65,7 @@ async function makeCompanyCode() {
 
 function register(app) {
   // Регистрация: с companyCode — сотрудник в существующую компанию; без — создание компании + менеджер (admin).
-  app.post('/api/auth/register', async (req, res, next) => {
+  app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
     try {
       const { name, phone, password, companyName, companyCode, companySize } = req.body || {};
       if (!requireFields(res, { name, password }, ['name', 'password'])) return;
@@ -71,7 +104,7 @@ function register(app) {
     } catch (err) { next(err); }
   });
 
-  app.post('/api/auth/login', async (req, res, next) => {
+  app.post('/api/auth/login', authRateLimit, async (req, res, next) => {
     try {
       const { phone, name, password, companyCode } = req.body || {};
       if (!requireFields(res, { password }, ['password'])) return;
@@ -142,12 +175,25 @@ function register(app) {
         if (!isScheduleDateOk(date)) return res.status(400).json({ error: `Дата "${date}" недоступна для расписания` });
       }
 
+      const existing = (await db.many('SELECT date FROM schedule WHERE user_id = $1', [req.user.id])).map((r) => dateKey(r.date));
+      const existingSet = new Set(existing);
+      const keep = new Set(clean);
+      // Реально меняются только даты, которых не было и теперь есть, или были и пропали —
+      // неизменную часть расписания (в т.ч. today после 10:00) трогать не запрещаем.
+      const changedDates = [...new Set([...clean.filter((d) => !existingSet.has(d)), ...existing.filter((d) => !keep.has(d))])];
+      for (const date of changedDates) {
+        // Дедлайн 10:00 действовал только на выбор блюда, не на само расписание —
+        // можно было добавить/убрать себя из плана дня после дедлайна (см. ОШИБКИ.md).
+        if (isLockedDate(date)) return res.status(409).json({ error: `Дата "${date}" уже закрыта для изменений (дедлайн 10:00)` });
+        if (await isDayConfirmed(req.user.company_id, date)) {
+          return res.status(409).json({ error: `День "${date}" уже подтверждён менеджером, расписание не меняется` });
+        }
+      }
+
       await db.tx(async (t) => {
         for (const date of clean) {
           await t.query('INSERT INTO schedule (user_id, date) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, date]);
         }
-        const existing = (await t.many('SELECT date FROM schedule WHERE user_id = $1', [req.user.id])).map((r) => dateKey(r.date));
-        const keep = new Set(clean);
         for (const date of existing) {
           if (!keep.has(date)) {
             await t.query('DELETE FROM schedule WHERE user_id = $1 AND date = $2', [req.user.id, date]);
@@ -167,6 +213,9 @@ function register(app) {
       const date = req.params.date;
       if (!isDateString(date)) return res.status(400).json({ error: 'Поле "date" неверного формата' });
       if (isLockedDate(date)) return res.status(409).json({ error: 'Этот день уже закрыт для выбора' });
+      if (await isDayConfirmed(req.user.company_id, date)) {
+        return res.status(409).json({ error: 'День уже подтверждён менеджером, выбор блюда больше не меняется' });
+      }
       const scheduled = await db.one('SELECT 1 FROM schedule WHERE user_id = $1 AND date = $2', [req.user.id, date]);
       if (!scheduled) return res.status(400).json({ error: 'День не в вашем расписании' });
 
@@ -253,6 +302,46 @@ function register(app) {
       }
 
       res.status(201).json({ success: true, telegramSent, plan: await dayPlan(req.user.company_id, date) });
+    } catch (err) { next(err); }
+  });
+
+  // Повторная отправка чека для уже подтверждённого дня — если Telegram не
+  // доставил сообщение при confirm, раньше не было способа попробовать снова
+  // (confirm второй раз давал 409 «уже подтверждён»).
+  app.post('/api/manager/report/:date/resend', auth, adminOnly, async (req, res, next) => {
+    try {
+      const date = req.params.date;
+      if (!isDateString(date)) return res.status(400).json({ error: 'Дата должна быть в формате YYYY-MM-DD' });
+      const already = await db.one('SELECT 1 FROM confirmed_days WHERE company_id = $1 AND date = $2', [req.user.company_id, date]);
+      if (!already) return res.status(400).json({ error: 'Этот день ещё не подтверждён — сначала confirm' });
+
+      const plan = await dayPlan(req.user.company_id, date);
+      const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
+      const fmt = (x) => x.split('-').reverse().join('.');
+      const lines = plan.perSet.map((s) => `• ${s.setName} × ${s.count} — ${(s.setPrice * s.count).toLocaleString('ru-RU')} UZS`);
+      if (plan.perSet.length === 0) lines.push('— нет запланированных сотрудников');
+      const message = [
+        '🍱 *Lunchistan — заказ подтверждён (повтор)*',
+        `📅 ${fmt(date)}`,
+        `🏢 ${company.name}`,
+        '',
+        '🍽 Меню:',
+        ...lines,
+        ...(plan.unpicked > 0 ? ['', `⚠️ Не выбрали (сет по умолчанию): ${plan.unpicked}`] : []),
+        '',
+        `👥 Запланировано: ${plan.scheduled} порций`,
+        `💰 Итого: ${plan.totalSum.toLocaleString('ru-RU')} UZS`,
+      ].join('\n');
+
+      let telegramSent = true;
+      try {
+        const result = await sendTelegramReceipt(message);
+        telegramSent = Boolean(result.ok);
+      } catch (err) {
+        telegramSent = false;
+        console.error('Не удалось повторно отправить чек в Telegram:', err.message);
+      }
+      res.json({ success: true, telegramSent });
     } catch (err) { next(err); }
   });
 }

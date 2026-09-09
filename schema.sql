@@ -101,6 +101,11 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lat DOUBLE PRECISION;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lon DOUBLE PRECISION;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_detail TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_fee BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+-- Защита от задвоения заказа при двойном клике/ретрае сети: один и тот же
+-- ключ с фронтенда не создаст второй заказ (см. routes_orders.js).
+CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx
+  ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL;
 
 -- Зоны доставки (круги от кухни). Чистая математика — без внешних API карт.
 CREATE TABLE IF NOT EXISTS delivery_zones (

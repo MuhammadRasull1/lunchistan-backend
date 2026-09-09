@@ -135,6 +135,28 @@ async function many(text, params) {
   return res.rows;
 }
 
+// PGlite имеет одно физическое соединение на процесс: если два tx() выполняются
+// конкурентно (обычное дело при await в Node), их BEGIN/COMMIT/ROLLBACK
+// перемешиваются на одном соединении — вторая транзакция может закоммититься
+// (или откатиться) внутри первой. Нашли на аудите: API успевал ответить
+// 201 с orderId, который тут же пропадал при откате параллельной транзакции.
+// Лечим сериализацией через цепочку промисов — каждая новая транзакция ждёт
+// завершения предыдущей, что бы с ней ни случилось.
+let pgliteChain = Promise.resolve();
+
+async function runPgliteTx(fn) {
+  const scoped = wrapClient((t, p) => driver.query(t, p || []));
+  await driver.query('BEGIN');
+  try {
+    const result = await fn(scoped);
+    await driver.query('COMMIT');
+    return result;
+  } catch (err) {
+    await driver.query('ROLLBACK');
+    throw err;
+  }
+}
+
 /** Транзакция. Колбэк получает { query, one, many } на «своём» соединении. */
 async function tx(fn) {
   await ready();
@@ -155,17 +177,9 @@ async function tx(fn) {
     }
   }
 
-  // PGlite — одно соединение, операции сериализованы
-  const scoped = wrapClient((t, p) => driver.query(t, p || []));
-  try {
-    await driver.query('BEGIN');
-    const result = await fn(scoped);
-    await driver.query('COMMIT');
-    return result;
-  } catch (err) {
-    await driver.query('ROLLBACK');
-    throw err;
-  }
+  const result = pgliteChain.then(() => runPgliteTx(fn), () => runPgliteTx(fn));
+  pgliteChain = result.catch(() => {}); // не даём упавшей транзакции заблокировать очередь навсегда
+  return result;
 }
 
 function wrapClient(q) {

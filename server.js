@@ -12,6 +12,10 @@ const { register: registerDelivery } = require('./routes_delivery');
 const { startBot } = require('./bot');
 
 const app = express();
+// Render (как большинство PaaS) стоит перед приложением как обратный прокси —
+// без этого req.ip всегда возвращает IP самого прокси, а не реального клиента,
+// и любой rate-limit по IP (см. routes.js authRateLimit) бьёт по всем сразу.
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 

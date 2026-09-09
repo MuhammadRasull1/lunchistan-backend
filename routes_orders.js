@@ -2,7 +2,7 @@
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
 const { sendClientReceipt } = require('./bot');
-const { auth, optionalAuth } = require('./auth');
+const { auth, optionalAuth, verifiedTelegramUserFromRequest } = require('./auth');
 const { isDateString, dateKey } = require('./lib');
 const { quote } = require('./logistics');
 
@@ -29,6 +29,14 @@ function extractLines(body) {
       unitPrice: num(l.unitPrice ?? l.price, 0),
       lineTotal: num(l.lineTotal ?? l.total, 0),
     }));
+}
+
+/** Реальные цены блюд из БД по setId (единственный источник правды — не то, что прислал клиент). */
+async function pricesForSetIds(setIds) {
+  const ids = [...new Set(setIds.filter((id) => Number.isInteger(id)))];
+  if (!ids.length) return new Map();
+  const rows = await db.many('SELECT id, price FROM menu_sets WHERE id = ANY($1)', [ids]);
+  return new Map(rows.map((r) => [r.id, Number(r.price)]));
 }
 
 function validate(lines, body) {
@@ -153,9 +161,63 @@ function register(app) {
       }
 
       const employeeCount = Math.max(1, num(body.employeeCount, 1));
-      const totalAmount = num(body.totalMonthlyPrice ?? body.totalPrice, 0)
-        || lines.reduce((s, l) => s + (l.lineTotal || l.unitPrice * l.portions * employeeCount), 0);
+
+      // Цену НЕ берём из тела запроса — только из БД по setId. Клиент прислал
+      // unitPrice/lineTotal/totalMonthlyPrice просто для отображения себе,
+      // сервер это игнорирует (см. ОШИБКИ.md — раньше можно было заказать за 1 сум).
+      const realPrices = await pricesForSetIds(lines.map((l) => l.setId));
+      if (authed) {
+        const unknownSet = lines.find((l) => !realPrices.has(l.setId));
+        if (unknownSet) {
+          return res.status(400).json({ error: `Неизвестное блюдо в заказе (id: ${unknownSet.setId})` });
+        }
+        for (const l of lines) {
+          l.unitPrice = realPrices.get(l.setId);
+          l.lineTotal = l.unitPrice * l.portions * employeeCount;
+        }
+      } else {
+        // Заявка-лид без входа: если setId всё же указан — тоже доверяем только БД;
+        // иначе (внешняя заявка без каталога) — цифры от клиента, но не отрицательные.
+        for (const l of lines) {
+          if (realPrices.has(l.setId)) {
+            l.unitPrice = realPrices.get(l.setId);
+            l.lineTotal = l.unitPrice * l.portions * employeeCount;
+          } else {
+            l.unitPrice = Math.max(0, l.unitPrice);
+            l.lineTotal = Math.max(0, l.lineTotal || l.unitPrice * l.portions * employeeCount);
+          }
+        }
+      }
+
+      const totalAmount = authed
+        ? lines.reduce((s, l) => s + l.lineTotal, 0)
+        : Math.max(0, num(body.totalMonthlyPrice ?? body.totalPrice, 0)) || lines.reduce((s, l) => s + l.lineTotal, 0);
+
       const paymentMethod = PAYMENT_METHODS.has(body.paymentMethod) ? body.paymentMethod : null;
+
+      // Telegram-личность — только из подписанной initData (заголовок), никогда из тела
+      // запроса: иначе можно было создать заказ «от имени» произвольного tg_user_id
+      // и заспамить его чеком/увидеть его данные через /status.
+      const verifiedTg = verifiedTelegramUserFromRequest(req);
+
+      // Идемпотентность: повторный клик/ретрай с тем же ключом не создаёт второй заказ.
+      const idempotencyKey = nonEmpty(body.idempotencyKey) ? body.idempotencyKey.trim().slice(0, 100) : null;
+      if (idempotencyKey) {
+        const existing = await db.one('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
+        if (existing) {
+          return res.status(200).json({
+            success: true,
+            orderId: existing.id,
+            orderNumber: `ORD-${String(existing.id).padStart(4, '0')}`,
+            status: existing.status,
+            isLead: existing.is_lead,
+            telegramSent: true, // уже был отправлен при первом (реальном) создании
+            deliveryFee: Number(existing.delivery_fee) || 0,
+            deliveryZone: null,
+            totalWithDelivery: Number(existing.total_amount),
+          });
+        }
+      }
 
       // Доставка «до двери»: координаты + детали (подъезд/этаж/домофон/ориентир)
       const destLat = typeof body.destLat === 'number' && Number.isFinite(body.destLat) ? body.destLat : null;
@@ -171,13 +233,15 @@ function register(app) {
       }
       const deliveryFee = deliveryQuote ? deliveryQuote.fee : 0;
 
-      const order = await db.tx(async (t) => {
-const o = await t.one(
+      let order;
+      try {
+        order = await db.tx(async (t) => {
+          const o = await t.one(
             `INSERT INTO orders
                (company_id, source, is_lead, status, contact_name, contact_phone, company_name,
                 address, dest_lat, dest_lon, dest_detail, delivery_fee, comment, tg_user_id,
-                tg_username, payment_method, employee_count, total_amount)
-             VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+                tg_username, payment_method, employee_count, total_amount, idempotency_key)
+             VALUES ($1,$2,$3,'new',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
             [
               companyId,
               authed ? 'bulk' : 'lead',
@@ -191,11 +255,12 @@ const o = await t.one(
               destDetail,
               deliveryFee,
               nonEmpty(body.comment) ? body.comment.trim() : null,
-              Number.isInteger(body.tgUserId) ? Math.abs(body.tgUserId) : null,
-              nonEmpty(body.tgUsername) ? body.tgUsername.trim().replace(/^@/, '') : null,
+              verifiedTg ? verifiedTg.id : null,
+              verifiedTg ? verifiedTg.username : null,
               paymentMethod,
               employeeCount,
               Math.round(totalAmount),
+              idempotencyKey,
             ],
           );
         for (const l of lines) {
@@ -210,9 +275,30 @@ const o = await t.one(
             ],
           );
         }
-        await t.query('INSERT INTO order_status_log (order_id, status, note) VALUES ($1,$2,$3)', [o.id, 'new', 'Создан']);
-        return o;
-      });
+          await t.query('INSERT INTO order_status_log (order_id, status, note) VALUES ($1,$2,$3)', [o.id, 'new', 'Создан']);
+          return o;
+        });
+      } catch (err) {
+        // Гонка двойного клика: обе попытки прошли проверку "нет такого ключа"
+        // до того, как первая закоммитилась — вторая словит нарушение уникальности.
+        if (idempotencyKey && err.code === '23505') {
+          const existing = await db.one('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
+          if (existing) {
+            return res.status(200).json({
+              success: true,
+              orderId: existing.id,
+              orderNumber: `ORD-${String(existing.id).padStart(4, '0')}`,
+              status: existing.status,
+              isLead: existing.is_lead,
+              telegramSent: true,
+              deliveryFee: Number(existing.delivery_fee) || 0,
+              deliveryZone: null,
+              totalWithDelivery: Number(existing.total_amount),
+            });
+          }
+        }
+        throw err;
+      }
 
       order.number = `ORD-${String(order.id).padStart(4, '0')}`;
 
