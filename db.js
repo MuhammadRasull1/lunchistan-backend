@@ -101,6 +101,13 @@ async function seed() {
     if (filled) console.log(`🍱 Бэкофилл меню (фото/КБЖУ/состав): ${filled} блюд`);
   }
 
+  // Синхронизация автоинкремента — обязательно ПОСЛЕ вставки строк выше (seed
+  // вставляет id явно, в обход DEFAULT nextval()). is_called=false + (MAX+1):
+  // следующий nextval() вернёт ровно это значение, работает и на пустой таблице.
+  await driver.query(
+    "SELECT setval('menu_sets_id_seq', COALESCE((SELECT MAX(id) FROM menu_sets), 0) + 1, false)"
+  );
+
   // Зоны доставки (круги от кухни). Заполняются только при пустой таблице.
   const zones = await driver.query('SELECT COUNT(*)::int AS c FROM delivery_zones');
   if (zones.rows[0].c === 0) {

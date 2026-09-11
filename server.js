@@ -143,6 +143,42 @@ app.delete('/api/owner/menu/:id', auth, ownerOnly, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Настройки бизнеса — публичные (клиенту на checkout нужен номер карты) ──
+// Плоский список ключей, а не эквайринг: дядя решил 11.09.2026 просто показывать
+// номер карты, перевод клиент делает сам вручную — не полноценный приём платежей.
+const SETTINGS_KEYS = ['payment_card_number', 'payment_card_holder'];
+
+app.get('/api/settings', async (req, res, next) => {
+  try {
+    const rows = await db.many('SELECT key, value FROM settings WHERE key = ANY($1)', [SETTINGS_KEYS]);
+    const byKey = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    res.json({
+      paymentCardNumber: byKey.payment_card_number || null,
+      paymentCardHolder: byKey.payment_card_holder || null,
+    });
+  } catch (err) { next(err); }
+});
+
+app.put('/api/owner/settings', auth, ownerOnly, async (req, res, next) => {
+  try {
+    const { paymentCardNumber, paymentCardHolder } = req.body || {};
+    const updates = [
+      ['payment_card_number', paymentCardNumber],
+      ['payment_card_holder', paymentCardHolder],
+    ].filter(([, v]) => v !== undefined);
+
+    for (const [key, value] of updates) {
+      const clean = typeof value === 'string' ? value.trim() : value;
+      await db.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+        [key, clean || null],
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // ── Смена пароля (в т.ч. владельцем после первого входа) ───────────
 app.post('/api/auth/password', auth, async (req, res, next) => {
   try {

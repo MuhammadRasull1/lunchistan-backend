@@ -58,7 +58,10 @@ ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAUL
 -- вставит строку с id вручную в обход API.
 CREATE SEQUENCE IF NOT EXISTS menu_sets_id_seq OWNED BY menu_sets.id;
 ALTER TABLE menu_sets ALTER COLUMN id SET DEFAULT nextval('menu_sets_id_seq');
-SELECT setval('menu_sets_id_seq', COALESCE((SELECT MAX(id) FROM menu_sets), 0), true);
+-- setval — НЕ здесь. migrate() выполняется раньше seed() (см. db.js build()),
+-- а на самой первой чистой базе в этот момент таблица ещё пуста: setval увидел бы
+-- 0 строк и поставил счётчик на 1 — коллизия с id, которые сидинг вставит следующим
+-- шагом явно (INSERT ... id=1..56 в обход DEFAULT). Синхронизация — в конце seed().
 ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -172,6 +175,14 @@ CREATE TABLE IF NOT EXISTS delivery_reminders (
   date     DATE NOT NULL,
   sent_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (order_id, date)
+);
+
+-- Настройки бизнеса — общие для всего Lunchistan, не привязаны к конкретной
+-- компании-клиенту. Добавлено 11.09.2026: номер карты для перевода при оплате
+-- "card" (дядя решил — просто показывать номер, не полноценный эквайринг).
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedule_user     ON schedule(user_id);
