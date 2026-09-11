@@ -41,6 +41,26 @@ CREATE TABLE IF NOT EXISTS menu_sets (
   category TEXT NOT NULL,
   price    INTEGER NOT NULL
 );
+-- Раньше меню сидилось один раз и правилось только правкой кода (см. seed_sets.json).
+-- Добавлено 11.09.2026: реальные поля для владельца, чтобы блюда редактировались из админки.
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS calories INTEGER;
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS proteins INTEGER;
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS fats INTEGER;
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS carbs INTEGER;
+-- [{name, icon, optional}] — состав обеда (главное блюдо + опциональные салат/лепёшка/напиток)
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS composition JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+-- id был обычным INTEGER PRIMARY KEY без автоинкремента (56 строк сидинга проставляли id
+-- руками) — теперь новые блюда из админки владельца получают id сами. Синхронизация
+-- на каждый старт сервера безопасна и самовосстанавливается, если кто-то когда-то
+-- вставит строку с id вручную в обход API.
+CREATE SEQUENCE IF NOT EXISTS menu_sets_id_seq OWNED BY menu_sets.id;
+ALTER TABLE menu_sets ALTER COLUMN id SET DEFAULT nextval('menu_sets_id_seq');
+SELECT setval('menu_sets_id_seq', COALESCE((SELECT MAX(id) FROM menu_sets), 0), true);
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 -- ── Контур «Команды»: расписание сотрудников и их выбор ─────────────
 CREATE TABLE IF NOT EXISTS schedule (

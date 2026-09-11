@@ -70,11 +70,35 @@ async function seed() {
     const sets = JSON.parse(fs.readFileSync(SEED_SETS_PATH, 'utf8'));
     for (const s of sets) {
       await driver.query(
-        'INSERT INTO menu_sets (id, name, category, price) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING',
-        [s.id, s.name, s.category, s.price],
+        `INSERT INTO menu_sets (id, name, category, price, description, image_url, calories, proteins, fats, carbs, composition)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ON CONFLICT (id) DO NOTHING`,
+        [s.id, s.name, s.category, s.price, s.description || '', s.image_url ?? null,
+          s.calories ?? null, s.proteins ?? null, s.fats ?? null, s.carbs ?? null,
+          JSON.stringify(s.composition || [])],
       );
     }
     console.log(`🍱 Загружено меню: ${sets.length} сетов`);
+  } else if (fs.existsSync(SEED_SETS_PATH)) {
+    // Таблица уже была заполнена по старой схеме (id/name/category/price) до того,
+    // как добавили description/image_url/КБЖУ/composition (11.09.2026) — бэкофиллим
+    // существующие строки данными из seed_sets.json, но только там, где владелец ещё
+    // ничего не редактировал сам (иначе затёрли бы его правки при каждом деплое).
+    const sets = JSON.parse(fs.readFileSync(SEED_SETS_PATH, 'utf8'));
+    let filled = 0;
+    for (const s of sets) {
+      const upd = await driver.query(
+        `UPDATE menu_sets SET
+           description = $2, image_url = $3, calories = $4, proteins = $5, fats = $6, carbs = $7, composition = $8
+         WHERE id = $1 AND image_url IS NULL AND composition = '[]'::jsonb`,
+        [s.id, s.description || '', s.image_url ?? null,
+          s.calories ?? null, s.proteins ?? null, s.fats ?? null, s.carbs ?? null,
+          JSON.stringify(s.composition || [])],
+      );
+      // pg отдаёт rowCount, PGlite — affectedRows
+      filled += upd.rowCount ?? upd.affectedRows ?? 0;
+    }
+    if (filled) console.log(`🍱 Бэкофилл меню (фото/КБЖУ/состав): ${filled} блюд`);
   }
 
   // Зоны доставки (круги от кухни). Заполняются только при пустой таблице.

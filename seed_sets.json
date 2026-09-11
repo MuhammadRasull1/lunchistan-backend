@@ -3,336 +3,1806 @@
     "id": 1,
     "name": "Аджахури с курицей",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Аджахури с курицей + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/adzhahuri-s-kuritsey.jpg",
+    "calories": 620,
+    "proteins": 30,
+    "fats": 22,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Аджахури с курицей",
+        "icon": "🍲",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 1,
+    "week_day": "Пн"
   },
   {
     "id": 2,
     "name": "Бефстроганов с рисом",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Бефстроганов с рисом + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/befstroganov-s-risom.jpg",
+    "calories": 632,
+    "proteins": 31,
+    "fats": 23,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Бефстроганов с рисом",
+        "icon": "🥩",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 2,
+    "week_day": "Вт"
   },
   {
     "id": 3,
     "name": "Биточки из курицы с рисом и овощами",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Биточки из курицы с рисом и овощами + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/bitochki-iz-kuritsy-s-risom-i-ovoschami.jpg",
+    "calories": 644,
+    "proteins": 32,
+    "fats": 24,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Биточки из курицы с рисом и овощами",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 3,
+    "week_day": "Ср"
   },
   {
     "id": 4,
     "name": "Деревенский с мясом и грибами",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Деревенский с мясом и грибами + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/derevenskiy-s-myasom-i-gribami.jpg",
+    "calories": 656,
+    "proteins": 33,
+    "fats": 22,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Деревенский с мясом и грибами",
+        "icon": "🥘",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 4,
+    "week_day": "Чт"
   },
   {
     "id": 5,
     "name": "Драники картофельные с соусом тар-тар",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Драники картофельные с соусом тар-тар + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/draniki-kartofelnye-s-sousom-tar-tar.jpg",
+    "calories": 668,
+    "proteins": 30,
+    "fats": 23,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Драники картофельные с соусом тар-тар",
+        "icon": "🥔",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 5,
+    "week_day": "Пт"
   },
   {
     "id": 6,
     "name": "Голубцы",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Голубцы + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/golubtsy-kapusta.jpg",
+    "calories": 620,
+    "proteins": 31,
+    "fats": 24,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Голубцы",
+        "icon": "🥬",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 6,
+    "week_day": "Пн"
   },
   {
     "id": 7,
     "name": "Говяжья котлета с пюре",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Говяжья котлета с пюре + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/govyazhya-kotleta-s-pyure.jpg",
+    "calories": 632,
+    "proteins": 32,
+    "fats": 22,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Говяжья котлета с пюре",
+        "icon": "🥩",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 7,
+    "week_day": "Вт"
   },
   {
     "id": 8,
     "name": "Гречка по-домашнему с курицей",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Гречка по-домашнему с курицей + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/grechka-po-domashnemu-s-kuritsey.jpg",
+    "calories": 644,
+    "proteins": 33,
+    "fats": 23,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Гречка по-домашнему с курицей",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 8,
+    "week_day": "Ср"
   },
   {
     "id": 9,
     "name": "Гуль ханум с соусом",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Гуль ханум с соусом + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/gul-hanum-s-sousom.jpg",
+    "calories": 656,
+    "proteins": 30,
+    "fats": 24,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Гуль ханум с соусом",
+        "icon": "🥟",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 9,
+    "week_day": "Чт"
   },
   {
     "id": 10,
     "name": "Гуляш из говядины с гречкой",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Гуляш из говядины с гречкой + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/gulyash-iz-govyadiny-s-grechkoy.jpg",
+    "calories": 668,
+    "proteins": 31,
+    "fats": 22,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Гуляш из говядины с гречкой",
+        "icon": "🥘",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 10,
+    "week_day": "Пт"
   },
   {
     "id": 11,
     "name": "Куриная грудка с овощами на пару",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриная грудка с овощами на пару + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-grudka-s-ovoschami-na-parujpg.jpg",
+    "calories": 620,
+    "proteins": 32,
+    "fats": 23,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Куриная грудка с овощами на пару",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 11,
+    "week_day": "Пн"
   },
   {
     "id": 12,
     "name": "Куриная грудка с сыром и булгуром с овощами",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриная грудка с сыром и булгуром с овощами + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-grudka-s-syrom-i-bulgur-s-ovoschami.jpg",
+    "calories": 632,
+    "proteins": 33,
+    "fats": 24,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Куриная грудка с сыром и булгуром с овощами",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 12,
+    "week_day": "Вт"
   },
   {
     "id": 13,
     "name": "Куриная котлета на пару с пюре",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриная котлета на пару с пюре + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-kotleta-na-paru-s-pyure.jpg",
+    "calories": 644,
+    "proteins": 30,
+    "fats": 22,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Куриная котлета на пару с пюре",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 13,
+    "week_day": "Ср"
   },
   {
     "id": 14,
     "name": "Куриная котлета по-киевски",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриная котлета по-киевски + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-kotleta-po-kievski.jpg",
+    "calories": 656,
+    "proteins": 31,
+    "fats": 23,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Куриная котлета по-киевски",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 14,
+    "week_day": "Чт"
   },
   {
     "id": 15,
     "name": "Котлета по-киевски с пюре",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Котлета по-киевски с пюре + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-kotleta-po-kievski-s-pyure.jpg",
+    "calories": 668,
+    "proteins": 32,
+    "fats": 24,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Котлета по-киевски с пюре",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 15,
+    "week_day": "Пт"
   },
   {
     "id": 16,
     "name": "Куриная котлета с пюре",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриная котлета с пюре + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kurinaya-kotleta-s-pyure.jpg",
+    "calories": 620,
+    "proteins": 33,
+    "fats": 22,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Куриная котлета с пюре",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 16,
+    "week_day": "Пн"
   },
   {
     "id": 17,
     "name": "Курица гриль с овощами",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица гриль с овощами + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-gril-s-ovoschami.jpg",
+    "calories": 632,
+    "proteins": 30,
+    "fats": 23,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Курица гриль с овощами",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 17,
+    "week_day": "Вт"
   },
   {
     "id": 18,
     "name": "Курица карри с рисом",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица карри с рисом + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-karri-s-risom.jpg",
+    "calories": 644,
+    "proteins": 31,
+    "fats": 24,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Курица карри с рисом",
+        "icon": "🍛",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 18,
+    "week_day": "Ср"
   },
   {
     "id": 19,
     "name": "Курица по-азиатски с рисом",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица по-азиатски с рисом + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-po-aziatski-s-risom.jpg",
+    "calories": 656,
+    "proteins": 32,
+    "fats": 22,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Курица по-азиатски с рисом",
+        "icon": "🍛",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 19,
+    "week_day": "Чт"
   },
   {
     "id": 20,
     "name": "Курица по-мексикански",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица по-мексикански + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-po-meksikanski.jpg",
+    "calories": 668,
+    "proteins": 33,
+    "fats": 23,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Курица по-мексикански",
+        "icon": "🌮",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 20,
+    "week_day": "Пт"
   },
   {
     "id": 21,
     "name": "Курица с овощами и соусом айоли",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица с овощами и соусом айоли + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-s-ovoschami-ayola.jpg",
+    "calories": 620,
+    "proteins": 30,
+    "fats": 24,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Курица с овощами и соусом айоли",
+        "icon": "🍗",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 21,
+    "week_day": "Пн"
   },
   {
     "id": 22,
     "name": "Курица терияки с рисом",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Курица терияки с рисом + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/kuritsa-teriyaki-s-risom.jpg",
+    "calories": 632,
+    "proteins": 31,
+    "fats": 22,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Курица терияки с рисом",
+        "icon": "🍛",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 22,
+    "week_day": "Вт"
   },
   {
     "id": 23,
     "name": "Люля-кебаб куриный с гречкой",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Люля-кебаб куриный с гречкой + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/lyulya-kurinye-s-grechkoy.jpg",
+    "calories": 644,
+    "proteins": 32,
+    "fats": 23,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Люля-кебаб куриный с гречкой",
+        "icon": "🥙",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 23,
+    "week_day": "Ср"
   },
   {
     "id": 24,
     "name": "Макароны по-флотски",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Макароны по-флотски + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/makarony-po-flotski.jpg",
+    "calories": 656,
+    "proteins": 33,
+    "fats": 24,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Макароны по-флотски",
+        "icon": "🍝",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 24,
+    "week_day": "Чт"
   },
   {
     "id": 25,
     "name": "Манты с говядиной",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Манты с говядиной + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/manty-s-govyadinoy.jpg",
+    "calories": 668,
+    "proteins": 30,
+    "fats": 22,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Манты с говядиной",
+        "icon": "🥟",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 25,
+    "week_day": "Пт"
   },
   {
     "id": 26,
     "name": "Митболы с пюре",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Митболы с пюре + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/mit-boly-s-pyure.jpg",
+    "calories": 620,
+    "proteins": 31,
+    "fats": 23,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Митболы с пюре",
+        "icon": "🧆",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 26,
+    "week_day": "Пн"
   },
   {
     "id": 27,
     "name": "Мясо по-французски",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Мясо по-французски + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/myaso-po-frantsuzski.jpg",
+    "calories": 632,
+    "proteins": 32,
+    "fats": 24,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Мясо по-французски",
+        "icon": "🥩",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 27,
+    "week_day": "Вт"
   },
   {
     "id": 28,
     "name": "Плов из говядины",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Плов из говядины + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/plov-iz-govyadiny.jpg",
+    "calories": 644,
+    "proteins": 33,
+    "fats": 22,
+    "carbs": 69,
+    "composition": [
+      {
+        "name": "Плов из говядины",
+        "icon": "🍚",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 28,
+    "week_day": "Ср"
   },
   {
     "id": 29,
     "name": "Жареные пельмени",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Жареные пельмени + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/zharenye-pelmeni.jpg",
+    "calories": 656,
+    "proteins": 30,
+    "fats": 23,
+    "carbs": 60,
+    "composition": [
+      {
+        "name": "Жареные пельмени",
+        "icon": "🥟",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 29,
+    "week_day": "Чт"
   },
   {
     "id": 30,
     "name": "Жареный рис по-азиатски",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Жареный рис по-азиатски + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/zharenyy-ris-po-aziatski.jpg",
+    "calories": 668,
+    "proteins": 31,
+    "fats": 24,
+    "carbs": 63,
+    "composition": [
+      {
+        "name": "Жареный рис по-азиатски",
+        "icon": "🍚",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 30,
+    "week_day": "Пт"
   },
   {
     "id": 31,
     "name": "Жареный рис с овощами",
     "category": "hot",
-    "price": 55000
+    "price": 55000,
+    "description": "Жареный рис с овощами + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/hot-dishes/zharenyy-ris-s-ovoschami.jpg",
+    "calories": 620,
+    "proteins": 32,
+    "fats": 22,
+    "carbs": 66,
+    "composition": [
+      {
+        "name": "Жареный рис с овощами",
+        "icon": "🥘",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 31,
+    "week_day": "Пн"
   },
   {
     "id": 32,
     "name": "Баклажаны по-корейски",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Баклажаны по-корейски + Напиток",
+    "image_url": "/images/dishes/salads/baklazhany-po-koreyski.jpg",
+    "calories": 232,
+    "proteins": 11,
+    "fats": 13,
+    "carbs": 29,
+    "composition": [
+      {
+        "name": "Баклажаны по-корейски",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 32,
+    "week_day": "Вт"
   },
   {
     "id": 33,
     "name": "Греческий салат",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Греческий салат + Напиток",
+    "image_url": "/images/dishes/salads/grecheskiy.jpg",
+    "calories": 244,
+    "proteins": 8,
+    "fats": 14,
+    "carbs": 20,
+    "composition": [
+      {
+        "name": "Греческий салат",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 33,
+    "week_day": "Ср"
   },
   {
     "id": 34,
     "name": "Морковча",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Морковча + Напиток",
+    "image_url": "/images/dishes/salads/morkovcha.jpg",
+    "calories": 256,
+    "proteins": 9,
+    "fats": 12,
+    "carbs": 23,
+    "composition": [
+      {
+        "name": "Морковча",
+        "icon": "🥕",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 34,
+    "week_day": "Чт"
   },
   {
     "id": 35,
     "name": "Огурцы по-корейски",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Огурцы по-корейски + Напиток",
+    "image_url": "/images/dishes/salads/ogurtsy-po-koreyski.jpg",
+    "calories": 268,
+    "proteins": 10,
+    "fats": 13,
+    "carbs": 26,
+    "composition": [
+      {
+        "name": "Огурцы по-корейски",
+        "icon": "🥒",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 35,
+    "week_day": "Пт"
   },
   {
     "id": 36,
     "name": "Оливье с колбасой",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Оливье с колбасой + Напиток",
+    "image_url": "/images/dishes/salads/olive-s-kolbasoy.jpg",
+    "calories": 220,
+    "proteins": 11,
+    "fats": 14,
+    "carbs": 29,
+    "composition": [
+      {
+        "name": "Оливье с колбасой",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 36,
+    "week_day": "Пн"
   },
   {
     "id": 37,
     "name": "Оливье с мясом",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Оливье с мясом + Напиток",
+    "image_url": "/images/dishes/salads/olive-s-myasom.jpg",
+    "calories": 232,
+    "proteins": 8,
+    "fats": 12,
+    "carbs": 20,
+    "composition": [
+      {
+        "name": "Оливье с мясом",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 37,
+    "week_day": "Вт"
   },
   {
     "id": 38,
     "name": "Весенний салат",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Весенний салат + Напиток",
+    "image_url": "/images/dishes/salads/vesenniy.jpg",
+    "calories": 244,
+    "proteins": 9,
+    "fats": 13,
+    "carbs": 23,
+    "composition": [
+      {
+        "name": "Весенний салат",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 38,
+    "week_day": "Ср"
   },
   {
     "id": 39,
     "name": "Винегрет",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Винегрет + Напиток",
+    "image_url": "/images/dishes/salads/vinegret.jpg",
+    "calories": 256,
+    "proteins": 10,
+    "fats": 14,
+    "carbs": 26,
+    "composition": [
+      {
+        "name": "Винегрет",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 39,
+    "week_day": "Чт"
   },
   {
     "id": 40,
     "name": "Винегрет с капустой",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Винегрет с капустой + Напиток",
+    "image_url": "/images/dishes/salads/vinegret-s-kapustoy.jpg",
+    "calories": 268,
+    "proteins": 11,
+    "fats": 12,
+    "carbs": 29,
+    "composition": [
+      {
+        "name": "Винегрет с капустой",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 40,
+    "week_day": "Пт"
   },
   {
     "id": 41,
     "name": "Витаминка",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Витаминка + Напиток",
+    "image_url": "/images/dishes/salads/vitaminka.jpg",
+    "calories": 220,
+    "proteins": 8,
+    "fats": 13,
+    "carbs": 20,
+    "composition": [
+      {
+        "name": "Витаминка",
+        "icon": "🥗",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 41,
+    "week_day": "Пн"
   },
   {
     "id": 42,
     "name": "Зелёный салат",
     "category": "salad",
-    "price": 55000
+    "price": 55000,
+    "description": "Зелёный салат + Напиток",
+    "image_url": "/images/dishes/salads/zelenyy-salat.jpg",
+    "calories": 232,
+    "proteins": 9,
+    "fats": 14,
+    "carbs": 23,
+    "composition": [
+      {
+        "name": "Зелёный салат",
+        "icon": "🥬",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 42,
+    "week_day": "Вт"
   },
   {
     "id": 43,
     "name": "Гречка отварная",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Гречка отварная + Напиток",
+    "image_url": "/images/dishes/sides/grechka-otvarnaya.jpg",
+    "calories": 344,
+    "proteins": 10,
+    "fats": 10,
+    "carbs": 56,
+    "composition": [
+      {
+        "name": "Гречка отварная",
+        "icon": "🍚",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 43,
+    "week_day": "Ср"
   },
   {
     "id": 44,
     "name": "Гречка с капустой",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Гречка с капустой + Напиток",
+    "image_url": "/images/dishes/sides/grechka-s-kapustoy.jpg",
+    "calories": 356,
+    "proteins": 11,
+    "fats": 11,
+    "carbs": 59,
+    "composition": [
+      {
+        "name": "Гречка с капустой",
+        "icon": "🥦",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 44,
+    "week_day": "Чт"
   },
   {
     "id": 45,
     "name": "Картофельное пюре",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Картофельное пюре + Напиток",
+    "image_url": "/images/dishes/sides/kartofelnoe-pyure.jpg",
+    "calories": 368,
+    "proteins": 8,
+    "fats": 12,
+    "carbs": 50,
+    "composition": [
+      {
+        "name": "Картофельное пюре",
+        "icon": "🥔",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 45,
+    "week_day": "Пт"
   },
   {
     "id": 46,
     "name": "Картофельные дольки с сыром",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Картофельные дольки с сыром + Напиток",
+    "image_url": "/images/dishes/sides/kartofelnye-dolki-s-syromjpg.jpg",
+    "calories": 320,
+    "proteins": 9,
+    "fats": 10,
+    "carbs": 53,
+    "composition": [
+      {
+        "name": "Картофельные дольки с сыром",
+        "icon": "🍟",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 46,
+    "week_day": "Пн"
   },
   {
     "id": 47,
     "name": "Картофель с грибами",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Картофель с грибами + Напиток",
+    "image_url": "/images/dishes/sides/kartofel-s-gribami.jpg",
+    "calories": 332,
+    "proteins": 10,
+    "fats": 11,
+    "carbs": 56,
+    "composition": [
+      {
+        "name": "Картофель с грибами",
+        "icon": "🥔",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 47,
+    "week_day": "Вт"
   },
   {
     "id": 48,
     "name": "Каша овсяная",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Каша овсяная + Напиток",
+    "image_url": "/images/dishes/sides/kasha-ovsyanaya-1.jpg",
+    "calories": 344,
+    "proteins": 11,
+    "fats": 12,
+    "carbs": 59,
+    "composition": [
+      {
+        "name": "Каша овсяная",
+        "icon": "🥣",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 48,
+    "week_day": "Ср"
   },
   {
     "id": 49,
     "name": "Каша рисовая",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Каша рисовая + Напиток",
+    "image_url": "/images/dishes/sides/kasha-risovaya.jpg",
+    "calories": 356,
+    "proteins": 8,
+    "fats": 10,
+    "carbs": 50,
+    "composition": [
+      {
+        "name": "Каша рисовая",
+        "icon": "🍚",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 49,
+    "week_day": "Чт"
   },
   {
     "id": 50,
     "name": "Каша рисовая на кокосовом молоке",
     "category": "side",
-    "price": 55000
+    "price": 55000,
+    "description": "Каша рисовая на кокосовом молоке + Напиток",
+    "image_url": "/images/dishes/sides/kasha-risovaya-na-kokosovom-moloke.jpg",
+    "calories": 368,
+    "proteins": 9,
+    "fats": 11,
+    "carbs": 53,
+    "composition": [
+      {
+        "name": "Каша рисовая на кокосовом молоке",
+        "icon": "🥥",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 50,
+    "week_day": "Пт"
   },
   {
     "id": 51,
     "name": "Бургер маззали",
     "category": "fastfood",
-    "price": 55000
+    "price": 55000,
+    "description": "Бургер маззали + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/fastfood/burger-mazzali.jpg",
+    "calories": 540,
+    "proteins": 26,
+    "fats": 28,
+    "carbs": 56,
+    "composition": [
+      {
+        "name": "Бургер маззали",
+        "icon": "🍔",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 51,
+    "week_day": "Пн"
   },
   {
     "id": 52,
     "name": "Клаб-сэндвич с курицей",
     "category": "fastfood",
-    "price": 55000
+    "price": 55000,
+    "description": "Клаб-сэндвич с курицей + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/fastfood/klab-sendvis-s-kuritsey.jpg",
+    "calories": 552,
+    "proteins": 27,
+    "fats": 26,
+    "carbs": 59,
+    "composition": [
+      {
+        "name": "Клаб-сэндвич с курицей",
+        "icon": "🥪",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 52,
+    "week_day": "Вт"
   },
   {
     "id": 53,
     "name": "Клаб-сэндвич с индейкой",
     "category": "fastfood",
-    "price": 55000
+    "price": 55000,
+    "description": "Клаб-сэндвич с индейкой + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/fastfood/klab-sendvich-s-indeykoy.jpg",
+    "calories": 564,
+    "proteins": 24,
+    "fats": 27,
+    "carbs": 50,
+    "composition": [
+      {
+        "name": "Клаб-сэндвич с индейкой",
+        "icon": "🥪",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 53,
+    "week_day": "Ср"
   },
   {
     "id": 54,
     "name": "Домашняя баклажанная икра",
     "category": "appetizer",
-    "price": 55000
+    "price": 55000,
+    "description": "Домашняя баклажанная икра + Напиток",
+    "image_url": "/images/dishes/appetizers/domashnyaya-baklazhannaya-ikra-3.jpg",
+    "calories": 296,
+    "proteins": 13,
+    "fats": 18,
+    "carbs": 23,
+    "composition": [
+      {
+        "name": "Домашняя баклажанная икра",
+        "icon": "🍆",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 54,
+    "week_day": "Чт"
   },
   {
     "id": 55,
     "name": "Долма",
     "category": "appetizer",
-    "price": 55000
+    "price": 55000,
+    "description": "Долма + Напиток",
+    "image_url": "/images/dishes/appetizers/dolma.jpg",
+    "calories": 308,
+    "proteins": 14,
+    "fats": 16,
+    "carbs": 26,
+    "composition": [
+      {
+        "name": "Долма",
+        "icon": "🍃",
+        "optional": false
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 55,
+    "week_day": "Пт"
   },
   {
     "id": 56,
     "name": "Куриный бульон с лапшой",
     "category": "soup",
-    "price": 55000
+    "price": 55000,
+    "description": "Куриный бульон с лапшой + Салат + Лепёшка + Напиток",
+    "image_url": "/images/dishes/soups/kurinyy-bulon-s-lapshoy.jpg",
+    "calories": 240,
+    "proteins": 15,
+    "fats": 11,
+    "carbs": 34,
+    "composition": [
+      {
+        "name": "Куриный бульон с лапшой",
+        "icon": "🍜",
+        "optional": false
+      },
+      {
+        "name": "Салат",
+        "icon": "🥗",
+        "optional": true
+      },
+      {
+        "name": "Лепёшка",
+        "icon": "🫓",
+        "optional": true
+      },
+      {
+        "name": "Напиток",
+        "icon": "🧃",
+        "optional": true
+      }
+    ],
+    "day_number": 56,
+    "week_day": "Пн"
   }
 ]
