@@ -84,6 +84,16 @@ function register(app) {
       if (companyCode) {
         company = await companyByCode(companyCode);
         if (!company) return res.status(400).json({ error: 'Неверный код команды' });
+        // Внутри одной компании имя должно быть уникальным — иначе вход по имени
+        // (см. /api/auth/login) не может однозначно понять, кто из двух Иванов
+        // logins, и молча выбирает первого попавшегося (см. ОШИБКИ.md).
+        const nameTaken = await db.one(
+          'SELECT 1 FROM users WHERE company_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2))',
+          [company.id, name],
+        );
+        if (nameTaken) {
+          return res.status(409).json({ error: 'В этой команде уже есть человек с таким именем — добавьте фамилию или инициал' });
+        }
       } else {
         if (!requireFields(res, { companyName }, ['companyName'])) return;
         const code = await makeCompanyCode();
@@ -112,17 +122,34 @@ function register(app) {
       let user = null;
       if (phone && String(phone).trim()) {
         user = await db.one('SELECT * FROM users WHERE phone = $1', [String(phone).trim()]);
-      } else if (name && String(name).trim()) {
-        const matches = await db.many('SELECT * FROM users WHERE name = $1', [String(name).trim()]);
-        if (matches.length === 1) {
-          user = matches[0];
-        } else if (matches.length > 1 && companyCode && String(companyCode).trim()) {
-          const company = await companyByCode(companyCode);
-          if (company) user = matches.find((m) => m.company_id === company.id) || null;
+        if (!user || !verifyPassword(password, user.password_hash)) {
+          return res.status(401).json({ error: 'Неверное имя или пароль' });
         }
+      } else if (name && String(name).trim()) {
+        // Имя уникально внутри компании, но не между компаниями: «Иван» может
+        // работать сразу в нескольких компаниях-клиентах. Сначала сужаем по коду
+        // команды (если его прислали), затем — по паролю. Раньше при нескольких
+        // тёзках вход молча отдавал 401 «неверный пароль», хотя пароль был верный,
+        // а поля для кода в форме входа нет — человек блокировался навсегда.
+        let matches = await db.many(
+          'SELECT * FROM users WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) ORDER BY id LIMIT 10',
+          [String(name).trim()],
+        );
+        if (companyCode && String(companyCode).trim()) {
+          const company = await companyByCode(companyCode);
+          matches = company ? matches.filter((m) => m.company_id === company.id) : [];
+        }
+        const byPassword = matches.filter((m) => verifyPassword(password, m.password_hash));
+        if (byPassword.length > 1) {
+          return res.status(409).json({
+            error: 'В системе несколько человек с таким именем. Введите код команды',
+            needCompanyCode: true,
+          });
+        }
+        user = byPassword[0] || null;
       }
 
-      if (!user || !verifyPassword(password, user.password_hash)) {
+      if (!user) {
         return res.status(401).json({ error: 'Неверное имя или пароль' });
       }
       const company = user.company_id ? await db.one('SELECT * FROM companies WHERE id = $1', [user.company_id]) : null;

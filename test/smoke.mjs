@@ -144,6 +144,39 @@ try {
   check('сотрудник выбрал сет', choice.status === 200 && choice.data.choice.setId === 3, choice.data);
   const mgrReport = await api('GET', `/api/manager/report?date=${futureDate(5)}`, null, companyToken);
   check('менеджер видит план дня', mgrReport.status === 200 && mgrReport.data.scheduled === 1, mgrReport.data);
+
+  console.log('\n── Дубль имени в компании (запрет) ──');
+  const dupReg = await api('POST', '/api/auth/register', {
+    name: '  сотрудник  ', phone: '+998955556688', password: 'emp1234', companyCode: reg.data.user.companyCode,
+  });
+  check('дубль имени (регистр/пробелы не спасают) → 409', dupReg.status === 409, dupReg.data);
+
+  console.log('\n── Тёзки в разных компаниях ──');
+  const co2 = await api('POST', '/api/auth/register', {
+    name: 'Бошлиқ', phone: '+998955550001', password: 'boss1234', companyName: 'Вторая фирма',
+  });
+  const code2 = co2.data?.user?.companyCode;
+  const twin = await api('POST', '/api/auth/register', {
+    name: 'Сотрудник', phone: '+998955550002', password: 'twin1234', companyCode: code2,
+  });
+  check('тёзка в другой компании регистрируется', twin.status === 201, twin.data);
+  const twinLogin = await api('POST', '/api/auth/login', { name: 'Сотрудник', password: 'twin1234' });
+  check('тёзка входит по своему паролю без кода', twinLogin.status === 200 && twinLogin.data.user.companyCode === code2, twinLogin.data);
+  const firstLogin = await api('POST', '/api/auth/login', { name: 'Сотрудник', password: 'emp1234' });
+  check('первый тёзка входит в свою компанию', firstLogin.status === 200 && firstLogin.data.user.companyCode === reg.data.user.companyCode, firstLogin.data);
+
+  const same = await api('POST', '/api/auth/register', {
+    name: 'Одинаковый', phone: '+998955550003', password: 'same1234', companyCode: code2,
+  });
+  check('подготовка: тёзка с тем же паролем', same.status === 201, same.data);
+  const same2 = await api('POST', '/api/auth/register', {
+    name: 'Одинаковый', phone: '+998955550004', password: 'same1234', companyCode: reg.data.user.companyCode,
+  });
+  check('подготовка: второй такой же в другой компании', same2.status === 201, same2.data);
+  const ambiguous = await api('POST', '/api/auth/login', { name: 'Одинаковый', password: 'same1234' });
+  check('неразличимые тёзки → 409 + needCompanyCode', ambiguous.status === 409 && ambiguous.data.needCompanyCode === true, ambiguous.data);
+  const resolved = await api('POST', '/api/auth/login', { name: 'Одинаковый', password: 'same1234', companyCode: code2 });
+  check('с кодом команды вход проходит', resolved.status === 200 && resolved.data.user.companyCode === code2, resolved.data);
 } catch (err) {
   failed++;
   console.error('\n💥 Тест упал:', err);
