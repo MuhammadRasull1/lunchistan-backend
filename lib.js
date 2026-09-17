@@ -46,25 +46,21 @@ function dateKey(v) {
   return String(v).slice(0, 10);
 }
 
-async function setCount() {
-  const r = await db.one('SELECT COUNT(*)::int AS c FROM menu_sets');
-  return r ? r.c : 0;
-}
 async function getSet(id) {
   return db.one('SELECT * FROM menu_sets WHERE id = $1', [id]);
 }
 
-/** Сет по умолчанию для даты — «порядковая» ротация от 1-го числа текущего месяца: (ordinal-1) % N + 1. */
-async function defaultSetForDate(dateStr) {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const target = new Date(y, m - 1, d);
-  const ordinal = Math.floor((target.getTime() - monthStart.getTime()) / 86400000) + 1;
-  const n = await setCount();
-  if (n === 0) return null;
-  const idx = (((ordinal - 1) % n) + n) % n;
-  return getSet(idx + 1);
+/**
+ * Блюда, предложенные на конкретную дату (активные, в порядке id). Заменяет
+ * прежнюю «ротацию» defaultSetForDate — меню больше не повторяется по кругу,
+ * владелец вносит его на каждую дату вручную через /api/owner/daily-menu.
+ */
+async function dayMenuSets(dateStr) {
+  return db.many(
+    `SELECT ms.* FROM daily_menu dm JOIN menu_sets ms ON ms.id = dm.set_id
+     WHERE dm.date = $1 AND ms.is_active = true ORDER BY ms.id`,
+    [dateStr],
+  );
 }
 
 function publicUser(user, company) {
@@ -107,6 +103,8 @@ async function dayPlan(companyId, date) {
     [companyId, date],
   );
   const choiceMap = new Map(choiceRows.map((c) => [c.user_id, c]));
+  const menuSets = await dayMenuSets(date);
+  const defaultSet = menuSets[0] ?? null;
 
   const rows = [];
   const bySet = new Map();
@@ -118,11 +116,13 @@ async function dayPlan(companyId, date) {
     if (ch) {
       set = await getSet(ch.set_id);
     } else {
-      set = await defaultSetForDate(date);
+      set = defaultSet;
       fromDefault = true;
     }
+    // Меню на дату ещё не внесено (или сотрудник не выбрал, а дефолта нет) —
+    // такая строка не должна попадать в подсчёт сумм/агрегатов по блюдам.
+    rows.push({ employeeId: emp.id, employeeName: emp.name, set: set || null, chosen: Boolean(ch), fromDefault });
     if (!set) continue;
-    rows.push({ employeeId: emp.id, employeeName: emp.name, set, chosen: Boolean(ch), fromDefault });
     const agg = bySet.get(set.id) || { setId: set.id, setName: set.name, setPrice: set.price, count: 0, defaults: 0, employees: [] };
     agg.count += 1;
     if (fromDefault) agg.defaults += 1;
@@ -144,7 +144,7 @@ async function dayPlan(companyId, date) {
     totalEmployees: employees.length,
     scheduled: rows.length,
     unpicked: rows.filter((r) => !r.chosen).length,
-    totalSum: rows.reduce((s, r) => s + r.set.price, 0),
+    totalSum: rows.filter((r) => r.set).reduce((s, r) => s + r.set.price, 0),
     perSet,
     rows,
   };
@@ -154,7 +154,7 @@ module.exports = {
   TZ, CUT_OFF_HOUR, MAX_SCHEDULE_DAYS,
   tzNowParts, todayTz, nowHourTz,
   isDateString, isLockedDate, isScheduleDateOk, maxDateStr, dateKey,
-  setCount, getSet, defaultSetForDate,
+  getSet, dayMenuSets,
   publicUser, employeesCount, companyByCode,
   dayPlan,
 };

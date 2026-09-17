@@ -65,6 +65,18 @@ ALTER TABLE menu_sets ALTER COLUMN id SET DEFAULT nextval('menu_sets_id_seq');
 ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE menu_sets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+-- Меню по датам: какие блюда из каталога menu_sets предложены на конкретный
+-- день. Добавлено 17.09.2026: раньше меню на дату вычислялось "ротацией" по
+-- номеру дня месяца (см. ОШИБКИ.md/СТАТУС.md) — на деле блюда не повторяются,
+-- владелец придумывает их заново каждый день и вносит заранее на любую дату.
+-- menu_sets теперь склад блюд, когда-либо существовавших, а не "меню на 56 дней".
+CREATE TABLE IF NOT EXISTS daily_menu (
+  date    DATE NOT NULL,
+  set_id  INTEGER NOT NULL REFERENCES menu_sets(id) ON DELETE CASCADE,
+  PRIMARY KEY (date, set_id)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_menu_date ON daily_menu(date);
+
 -- ── Контур «Команды»: расписание сотрудников и их выбор ─────────────
 CREATE TABLE IF NOT EXISTS schedule (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

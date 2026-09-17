@@ -76,6 +76,32 @@ try {
   const summaryNoAuth = await api('GET', '/api/owner/summary');
   check('owner/summary без токена → 401', summaryNoAuth.status === 401);
 
+  console.log('\n── Меню по датам (daily_menu) ──');
+  // 17.09.2026: блюда больше не повторяются по ротации — на каждую дату,
+  // используемую ниже в тесте, владелец должен явно внести меню.
+  for (const offset of [2, 3, 4, 5, 6]) {
+    const d = futureDate(offset);
+    const put = await api('PUT', `/api/owner/daily-menu/${d}`, { setIds: [1, 2, 3] }, ownerToken);
+    check(`owner/daily-menu PUT на ${d} → сохранено`, put.status === 200 && put.data.setIds.length === 3, put.data);
+  }
+  const dayMenu = await api('GET', `/api/menu/day/${futureDate(2)}`);
+  check('menu/day → 3 блюда', dayMenu.status === 200 && dayMenu.data.sets.length === 3, dayMenu.data);
+  const emptyDayMenu = await api('GET', `/api/menu/day/${futureDate(30)}`);
+  check('menu/day без меню → пусто', emptyDayMenu.status === 200 && emptyDayMenu.data.sets.length === 0, emptyDayMenu.data);
+  const availableDates = await api('GET', '/api/menu/available-dates');
+  check(
+    'menu/available-dates включает внесённую дату, не включает пустую',
+    availableDates.status === 200
+      && availableDates.data.dates.includes(futureDate(2))
+      && !availableDates.data.dates.includes(futureDate(30)),
+    availableDates.data,
+  );
+  const orderNoMenu = await api('POST', '/api/orders', {
+    contactName: 'Без меню', contactPhone: '+998900000099',
+    lines: [{ date: futureDate(30), setId: 1, setName: 'Тест', portions: 1 }],
+  });
+  check('заказ на дату без внесённого меню → 400', orderNoMenu.status === 400, orderNoMenu.data);
+
   console.log('\n── Компания + оптовый заказ ──');
   const reg = await api('POST', '/api/auth/register', {
     name: 'Иван', phone: '+998911112233', password: 'pass1234', companyName: 'Souvenir', companySize: 60,

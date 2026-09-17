@@ -39,6 +39,24 @@ async function pricesForSetIds(setIds) {
   return new Map(rows.map((r) => [r.id, Number(r.price)]));
 }
 
+/**
+ * Какие setId реально предложены на каждую дату (daily_menu) — 17.09.2026:
+ * блюдо больше не повторяется по кругу, существование в каталоге menu_sets
+ * недостаточно, чтобы его можно было заказать на дату (см. schema.sql daily_menu).
+ * Возвращает Map<date, Set<setId>>.
+ */
+async function offeredSetsByDate(dates) {
+  const uniqDates = [...new Set(dates.filter((d) => typeof d === 'string' && d))];
+  const map = new Map();
+  if (!uniqDates.length) return map;
+  const rows = await db.many('SELECT date::text AS date, set_id FROM daily_menu WHERE date = ANY($1)', [uniqDates]);
+  for (const r of rows) {
+    if (!map.has(r.date)) map.set(r.date, new Set());
+    map.get(r.date).add(r.set_id);
+  }
+  return map;
+}
+
 function validate(lines, body) {
   const errors = [];
   if (lines.length === 0) errors.push('Не передан состав заказа (lines / days)');
@@ -166,18 +184,28 @@ function register(app) {
       // unitPrice/lineTotal/totalMonthlyPrice просто для отображения себе,
       // сервер это игнорирует (см. ОШИБКИ.md — раньше можно было заказать за 1 сум).
       const realPrices = await pricesForSetIds(lines.map((l) => l.setId));
+      const offered = await offeredSetsByDate(lines.map((l) => l.date));
       if (authed) {
         const unknownSet = lines.find((l) => !realPrices.has(l.setId));
         if (unknownSet) {
           return res.status(400).json({ error: `Неизвестное блюдо в заказе (id: ${unknownSet.setId})` });
+        }
+        const notOffered = lines.find((l) => !(offered.get(l.date) || new Set()).has(l.setId));
+        if (notOffered) {
+          return res.status(400).json({ error: `Блюдо недоступно на дату ${notOffered.date}` });
         }
         for (const l of lines) {
           l.unitPrice = realPrices.get(l.setId);
           l.lineTotal = l.unitPrice * l.portions * employeeCount;
         }
       } else {
-        // Заявка-лид без входа: если setId всё же указан — тоже доверяем только БД;
-        // иначе (внешняя заявка без каталога) — цифры от клиента, но не отрицательные.
+        // Заявка-лид без входа: если setId всё же указан — тоже доверяем только БД
+        // (включая проверку, что блюдо предложено именно на эту дату); иначе
+        // (внешняя заявка без каталога) — цифры от клиента, но не отрицательные.
+        const notOffered = lines.find((l) => realPrices.has(l.setId) && !(offered.get(l.date) || new Set()).has(l.setId));
+        if (notOffered) {
+          return res.status(400).json({ error: `Блюдо недоступно на дату ${notOffered.date}` });
+        }
         for (const l of lines) {
           if (realPrices.has(l.setId)) {
             l.unitPrice = realPrices.get(l.setId);

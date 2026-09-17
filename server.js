@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 
 const db = require('./db');
+const { isDateString, todayTz } = require('./lib');
 const { auth, ownerOnly, verifyPassword, hashPassword, MIN_PASSWORD } = require('./auth');
 const { register: registerTeams } = require('./routes');
 const { register: registerOrders } = require('./routes_orders');
@@ -38,6 +39,45 @@ app.get('/api/menu', async (req, res, next) => {
       `SELECT ${MENU_FIELDS} FROM menu_sets WHERE is_active = true ORDER BY id`
     );
     res.json(sets);
+  } catch (err) { next(err); }
+});
+
+// Меню на конкретную дату — 17.09.2026: заменяет прежнюю детерминированную
+// «ротацию» блюда по номеру дня. Блюда на дату теперь вносит владелец вручную
+// (/api/owner/daily-menu), заказ доступен только для дат с внесённым меню.
+app.get('/api/menu/day/:date', async (req, res, next) => {
+  try {
+    const { date } = req.params;
+    if (!isDateString(date)) return res.status(400).json({ error: 'Дата должна быть в формате YYYY-MM-DD' });
+    const sets = await db.many(
+      `SELECT ${MENU_FIELDS} FROM daily_menu dm JOIN menu_sets ms ON ms.id = dm.set_id
+       WHERE dm.date = $1 AND ms.is_active = true ORDER BY ms.id`,
+      [date],
+    );
+    res.json({ date, sets });
+  } catch (err) { next(err); }
+});
+
+function plusDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+app.get('/api/menu/available-dates', async (req, res, next) => {
+  try {
+    const today = todayTz();
+    const from = isDateString(req.query.from) ? req.query.from : today;
+    const to = isDateString(req.query.to) ? req.query.to : plusDays(today, 60);
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    const rows = await db.many(
+      `SELECT DISTINCT dm.date::text AS date
+       FROM daily_menu dm JOIN menu_sets ms ON ms.id = dm.set_id
+       WHERE ms.is_active = true AND dm.date BETWEEN $1 AND $2
+       ORDER BY dm.date::text`,
+      [lo, hi],
+    );
+    res.json({ dates: rows.map((r) => r.date) });
   } catch (err) { next(err); }
 });
 
@@ -140,6 +180,49 @@ app.delete('/api/owner/menu/:id', auth, ownerOnly, async (req, res, next) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Блюдо не найдено' });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ── Меню на дату — управление владельцем ────────────────────────────
+// Владелец назначает, какие блюда из каталога menu_sets предложены на
+// конкретную дату (см. daily_menu в schema.sql). Дата без записей — недоступна
+// для заказа ни в оптовых заказах, ни в «Командах».
+app.get('/api/owner/daily-menu/:date', auth, ownerOnly, async (req, res, next) => {
+  try {
+    const { date } = req.params;
+    if (!isDateString(date)) return res.status(400).json({ error: 'Дата должна быть в формате YYYY-MM-DD' });
+    const rows = await db.many('SELECT set_id FROM daily_menu WHERE date = $1 ORDER BY set_id', [date]);
+    res.json({ date, setIds: rows.map((r) => r.set_id) });
+  } catch (err) { next(err); }
+});
+
+app.put('/api/owner/daily-menu/:date', auth, ownerOnly, async (req, res, next) => {
+  try {
+    const { date } = req.params;
+    if (!isDateString(date)) return res.status(400).json({ error: 'Дата должна быть в формате YYYY-MM-DD' });
+
+    const { setIds } = req.body || {};
+    if (!Array.isArray(setIds) || setIds.some((id) => !Number.isInteger(id))) {
+      return res.status(400).json({ error: 'Поле "setIds" должно быть массивом id блюд' });
+    }
+    const clean = [...new Set(setIds)];
+
+    if (clean.length) {
+      const existing = await db.many('SELECT id FROM menu_sets WHERE id = ANY($1)', [clean]);
+      const existingIds = new Set(existing.map((r) => r.id));
+      const unknown = clean.filter((id) => !existingIds.has(id));
+      if (unknown.length) {
+        return res.status(400).json({ error: `Блюдо не найдено в каталоге (id: ${unknown.join(', ')})` });
+      }
+    }
+
+    await db.tx(async (t) => {
+      await t.query('DELETE FROM daily_menu WHERE date = $1', [date]);
+      for (const setId of clean) {
+        await t.query('INSERT INTO daily_menu (date, set_id) VALUES ($1,$2)', [date, setId]);
+      }
+    });
+    res.json({ date, setIds: clean });
   } catch (err) { next(err); }
 });
 

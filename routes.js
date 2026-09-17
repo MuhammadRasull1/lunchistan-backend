@@ -7,7 +7,7 @@ const {
 } = require('./auth');
 const {
   isDateString, isLockedDate, isScheduleDateOk, dateKey,
-  setCount, getSet, defaultSetForDate, publicUser, employeesCount, companyByCode,
+  dayMenuSets, publicUser, employeesCount, companyByCode,
   todayTz, dayPlan,
 } = require('./lib');
 
@@ -181,7 +181,8 @@ function register(app) {
       const out = [];
       for (const date of days) {
         const ch = choiceMap.get(date);
-        const def = await defaultSetForDate(date);
+        const menuSets = await dayMenuSets(date);
+        const def = menuSets[0] ?? null;
         out.push({
           date,
           locked: isLockedDate(date),
@@ -246,9 +247,12 @@ function register(app) {
       const scheduled = await db.one('SELECT 1 FROM schedule WHERE user_id = $1 AND date = $2', [req.user.id, date]);
       if (!scheduled) return res.status(400).json({ error: 'День не в вашем расписании' });
 
+      const menuSets = await dayMenuSets(date);
+      if (!menuSets.length) return res.status(400).json({ error: 'Меню на эту дату ещё не внесено' });
+
       const setId = Number((req.body || {}).setId);
-      const set = Number.isInteger(setId) && (await setCount()) ? await getSet(setId) : null;
-      if (!set) return res.status(400).json({ error: 'Сет не найден' });
+      const set = Number.isInteger(setId) ? menuSets.find((s) => s.id === setId) : null;
+      if (!set) return res.status(400).json({ error: 'Блюдо не предложено на эту дату' });
 
       await db.query(
         `INSERT INTO choices (user_id, date, set_id, set_name, set_price) VALUES ($1,$2,$3,$4,$5)
