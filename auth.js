@@ -1,8 +1,25 @@
-/** Пароли (scrypt), токены сессий, middleware авторизации, проверка Telegram initData. */
+/** Пароли (PBKDF2/WebCrypto), токены сессий, middleware авторизации, проверка Telegram initData. */
 const crypto = require('node:crypto');
 const db = require('./db');
 
 const MIN_PASSWORD = 4;
+// 20 000 итераций — не рекомендация OWASP (600 000+), а потолок, в который
+// укладывается CPU-время одного запроса на бесплатном тарифе Cloudflare
+// Workers (10 мс). Замер 17.09.2026: 20k ≈ 6мс, 30k ≈ 10мс (впритык),
+// scrypt по умолчанию (Node) — 41-49мс, не проходит совсем. Осознанный
+// компромисс безопасность/цена, принят пользователем.
+const PBKDF2_ITERATIONS = 20000;
+const subtleCrypto = globalThis.crypto.subtle;
+
+async function pbkdf2Hex(password, saltHex, iterations) {
+  const enc = new TextEncoder();
+  const key = await subtleCrypto.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await subtleCrypto.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: Buffer.from(saltHex, 'hex'), iterations },
+    key, 256,
+  );
+  return Buffer.from(bits).toString('hex');
+}
 // Сколько секунд doверяем initData с момента auth_date (Telegram сам не задаёт
 // жёсткого лимита — 24ч покрывает обычную сессию TMA, не давая протухшей
 // ссылке работать вечно).
@@ -62,13 +79,31 @@ function verifiedTelegramUserFromRequest(req) {
   return verifyTelegramInitData(typeof raw === 'string' ? raw : null);
 }
 
-function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
+async function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = await pbkdf2Hex(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${salt}:${hash}`;
 }
 
-function verifyPassword(password, stored) {
-  const [salt, hash] = String(stored || '').split(':');
+/** true — хеш ещё в старом формате scrypt (до перехода на PBKDF2 17.09.2026),
+ * пароль стоит перехешировать сразу после успешной проверки (см. routes.js). */
+function isLegacyHash(stored) {
+  return typeof stored === 'string' && stored.length > 0 && !stored.startsWith('pbkdf2:');
+}
+
+async function verifyPassword(password, stored) {
+  const s = String(stored || '');
+  if (s.startsWith('pbkdf2:')) {
+    const [, iterStr, salt, hash] = s.split(':');
+    const iterations = Number(iterStr);
+    if (!salt || !hash || !Number.isInteger(iterations)) return false;
+    const candidate = await pbkdf2Hex(password, salt, iterations);
+    const a = Buffer.from(hash, 'hex');
+    const b = Buffer.from(candidate, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  // Старый формат: `${salt}:${scryptHash}`, оставлен для пользователей,
+  // заведённых до 17.09.2026 — перехешируется при следующем успешном входе.
+  const [salt, hash] = s.split(':');
   if (!salt || !hash) return false;
   const candidate = crypto.scryptSync(password, salt, 64).toString('hex');
   const a = Buffer.from(hash, 'hex');
@@ -140,6 +175,7 @@ module.exports = {
   MIN_PASSWORD,
   hashPassword,
   verifyPassword,
+  isLegacyHash,
   createSession,
   userFromToken,
   auth,

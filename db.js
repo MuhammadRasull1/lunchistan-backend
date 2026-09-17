@@ -141,7 +141,7 @@ async function seed() {
       }
       await driver.query(
         'INSERT INTO users (company_id, role, name, phone, password_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (phone) DO NOTHING',
-        [company.id, 'owner', process.env.OWNER_NAME || 'Владелец', phone, hashPassword(password)],
+        [company.id, 'owner', process.env.OWNER_NAME || 'Владелец', phone, await hashPassword(password)],
       );
       console.log(`👤 Создан аккаунт владельца: ${phone}`);
     }

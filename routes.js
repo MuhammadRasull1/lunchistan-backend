@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
 const {
-  MIN_PASSWORD, hashPassword, verifyPassword, createSession, auth, adminOnly,
+  MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, auth, adminOnly,
 } = require('./auth');
 const {
   isDateString, isLockedDate, isScheduleDateOk, dateKey,
@@ -32,9 +32,19 @@ async function isDayConfirmed(companyId, date) {
 const authAttempts = new Map(); // ip -> число попыток в текущем окне
 const AUTH_WINDOW_MS = 5 * 60 * 1000;
 const AUTH_MAX_ATTEMPTS = 15;
-setInterval(() => authAttempts.clear(), AUTH_WINDOW_MS).unref();
+// Раньше окно сбрасывалось таймером setInterval — на верхнем уровне модуля
+// это запрещено рантаймом Cloudflare Workers ("Disallowed operation called
+// within global scope"). Ленивый сброс при первом запросе после AUTH_WINDOW_MS
+// даёт то же поведение (скользящее окно на 5 минут) без глобального таймера,
+// работает одинаково на Render и Workers.
+let authWindowStart = Date.now();
 
 function authRateLimit(req, res, next) {
+  const now = Date.now();
+  if (now - authWindowStart > AUTH_WINDOW_MS) {
+    authAttempts.clear();
+    authWindowStart = now;
+  }
   const ip = req.ip || 'unknown';
   const n = (authAttempts.get(ip) || 0) + 1;
   authAttempts.set(ip, n);
@@ -107,7 +117,7 @@ function register(app) {
 
       const user = await db.one(
         'INSERT INTO users (company_id, role, name, phone, password_hash) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [company.id, role, name.trim(), effectivePhone, hashPassword(password)],
+        [company.id, role, name.trim(), effectivePhone, await hashPassword(password)],
       );
       const token = await createSession(user.id);
       res.status(201).json({ token, user: publicUser(user, company) });
@@ -122,7 +132,7 @@ function register(app) {
       let user = null;
       if (phone && String(phone).trim()) {
         user = await db.one('SELECT * FROM users WHERE phone = $1', [String(phone).trim()]);
-        if (!user || !verifyPassword(password, user.password_hash)) {
+        if (!user || !(await verifyPassword(password, user.password_hash))) {
           return res.status(401).json({ error: 'Неверное имя или пароль' });
         }
       } else if (name && String(name).trim()) {
@@ -139,7 +149,10 @@ function register(app) {
           const company = await companyByCode(companyCode);
           matches = company ? matches.filter((m) => m.company_id === company.id) : [];
         }
-        const byPassword = matches.filter((m) => verifyPassword(password, m.password_hash));
+        const checked = await Promise.all(
+          matches.map(async (m) => ({ m, ok: await verifyPassword(password, m.password_hash) })),
+        );
+        const byPassword = checked.filter((c) => c.ok).map((c) => c.m);
         if (byPassword.length > 1) {
           return res.status(409).json({
             error: 'В системе несколько человек с таким именем. Введите код команды',
@@ -151,6 +164,13 @@ function register(app) {
 
       if (!user) {
         return res.status(401).json({ error: 'Неверное имя или пароль' });
+      }
+      // Ленивый перехеш: пользователь ещё на старом scrypt (заведён до
+      // 17.09.2026) — раз пароль уже проверен, обновляем хеш на PBKDF2 тут же,
+      // без отдельной миграции и без смены пароля пользователем.
+      if (isLegacyHash(user.password_hash)) {
+        const upgraded = await hashPassword(password);
+        await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [upgraded, user.id]);
       }
       const company = user.company_id ? await db.one('SELECT * FROM companies WHERE id = $1', [user.company_id]) : null;
       const token = await createSession(user.id);

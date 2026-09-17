@@ -1,0 +1,19 @@
+name = "lunchistan-backend-worker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Общий код с Render (../..: routes*.js, lib.js) делает require('./db') и
+# require('./bot') рассчитывая на Node-версии (pg-драйвер, long-polling бот).
+# Здесь оба подменяются на Workers-совместимые — единая точка правки для
+# всех require('./db')/require('./bot') в бандле. telegram.js/logistics.js/
+# auth.js трогать не нужно — они читают process.env напрямую, а он на Workers
+# зеркалит переменные Worker'а благодаря nodejs_compat (проверено).
+[alias]
+"./db" = "./src/db.js"
+"./bot" = "./src/bot.js"
+
+# Напоминания о доставке (bot.js remindUpcoming) — раньше setInterval раз в час
+# внутри всегда работающего процесса; на Workers аналог — Cron Trigger.
+[triggers]
+crons = ["0 * * * *"]

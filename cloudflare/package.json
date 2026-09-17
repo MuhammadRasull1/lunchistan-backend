@@ -1,0 +1,16 @@
+{
+  "name": "lunchistan-backend-worker",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  }
+}
