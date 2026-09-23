@@ -115,19 +115,31 @@ function newToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+const SESSION_TTL_DAYS = 30;
+
 async function createSession(userId) {
   const token = newToken();
-  await db.query('INSERT INTO sessions (token, user_id) VALUES ($1, $2)', [token, userId]);
+  await db.query(
+    `INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, now() + interval '${SESSION_TTL_DAYS} days')`,
+    [token, userId],
+  );
   return token;
 }
 
 async function userFromToken(token) {
   if (!token) return null;
   const row = await db.one(
-    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1`,
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token = $1 AND s.expires_at > now()`,
     [token],
   );
   return row || null;
+}
+
+/** Разлогин: удаляет текущий токен сессии. */
+async function destroySession(token) {
+  if (!token) return;
+  await db.query('DELETE FROM sessions WHERE token = $1', [token]);
 }
 
 function bearer(req) {
@@ -177,6 +189,7 @@ module.exports = {
   verifyPassword,
   isLegacyHash,
   createSession,
+  destroySession,
   userFromToken,
   auth,
   optionalAuth,

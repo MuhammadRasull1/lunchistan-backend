@@ -22,6 +22,7 @@ const env = {
   OWNER_PASSWORD: 'owner-pass',
   TELEGRAM_BOT_TOKEN: '',
   CHAT_ID: '',
+  AUTH_MAX_ATTEMPTS: '100',
 };
 
 const server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -152,6 +153,18 @@ try {
   const summary2 = await api('GET', '/api/owner/summary', null, ownerToken);
   check('после оплаты unpaid уменьшился', summary2.data.money.unpaid < summary2.data.money.ordered, summary2.data.money);
 
+  console.log('\n── Разлогин (срок жизни сессии) ──');
+  const logoutReg = await api('POST', '/api/auth/register', {
+    name: 'Разлогин', phone: '+998955559900', password: 'logout123', companyName: 'ЛогинФирма',
+  });
+  const logoutToken = logoutReg.data?.token;
+  const beforeLogout = await api('GET', '/api/me', null, logoutToken);
+  check('токен рабочий до разлогина', beforeLogout.status === 200, beforeLogout.data);
+  const logout = await api('POST', '/api/auth/logout', null, logoutToken);
+  check('logout → ok', logout.status === 200 && logout.data.ok === true, logout.data);
+  const afterLogout = await api('GET', '/api/me', null, logoutToken);
+  check('токен недействителен после разлогина → 401', afterLogout.status === 401, afterLogout.data);
+
   console.log('\n── Смена пароля ──');
   const pw = await api('POST', '/api/auth/password', { oldPassword: 'owner-pass', newPassword: 'new-owner-pass' }, ownerToken);
   check('смена пароля владельца → ok', pw.status === 200 && pw.data.ok === true, pw.data);
@@ -170,6 +183,57 @@ try {
   check('сотрудник выбрал сет', choice.status === 200 && choice.data.choice.setId === 3, choice.data);
   const mgrReport = await api('GET', `/api/manager/report?date=${futureDate(5)}`, null, companyToken);
   check('менеджер видит план дня', mgrReport.status === 200 && mgrReport.data.scheduled === 1, mgrReport.data);
+
+  console.log('\n── «Кор»: подтверждение дня создаёт деньги (bug 3.1) ──');
+  const confirmDate = futureDate(6);
+  const confirm = await api('POST', `/api/manager/report/${confirmDate}/confirm`, {}, companyToken);
+  check('confirm → 201', confirm.status === 201 && confirm.data.success === true, confirm.data);
+  const summaryKor = await api('GET', '/api/owner/summary', null, ownerToken);
+  check('в сводке появился korInvoiced > 0', summaryKor.data?.money?.korInvoiced > 0, summaryKor.data?.money);
+  check('korUnpaid = korInvoiced (ещё не оплачено)', summaryKor.data.money.korUnpaid === summaryKor.data.money.korInvoiced, summaryKor.data.money);
+  const invoices = await api('GET', '/api/owner/invoices', null, ownerToken);
+  check('owner/invoices → есть счёт со статусом open', invoices.status === 200 && invoices.data.invoices.some((i) => i.status === 'open' && i.totalAmount > 0), invoices.data);
+  const invoiceRow = invoices.data.invoices.find((i) => i.totalAmount > 0);
+  const invoiceId = invoiceRow.id;
+  const partial = Math.floor(invoiceRow.totalAmount / 2) || 1;
+  const payment = await api('POST', `/api/owner/invoices/${invoiceId}/payments`, { amount: partial, method: 'card' }, ownerToken);
+  check('частичная оплата → paidAmount учтён, статус ещё open', payment.status === 200 && payment.data.paidAmount === partial && payment.data.status === 'open', payment.data);
+  const fullPayment = await api('POST', `/api/owner/invoices/${invoiceId}/payments`, { amount: payment.data.unpaidAmount, method: 'card' }, ownerToken);
+  check('полная оплата → статус paid', fullPayment.status === 200 && fullPayment.data.status === 'paid' && fullPayment.data.unpaidAmount === 0, fullPayment.data);
+
+  console.log('\n── Управление сотрудниками менеджером (bug 4f/4g) ──');
+  // Отдельный одноразовый сотрудник — не трогаем «Сотрудник» из более ранних
+  // тестов (на него завязана регрессия на дубль имени ниже по файлу).
+  const tempEmpReg = await api('POST', '/api/auth/register', {
+    name: 'Временный', phone: '+998955559911', password: 'temp1234', companyCode: reg.data.user.companyCode,
+  });
+  const empList = await api('GET', '/api/manager/employees', null, companyToken);
+  check('менеджер видит список сотрудников', empList.status === 200 && empList.data.employees.some((e) => e.name === 'Временный'), empList.data);
+  const empId = tempEmpReg.data.user.id;
+  const resetPw = await api('POST', `/api/manager/employees/${empId}/reset-password`, {}, companyToken);
+  check('сброс пароля сотрудника → новый пароль', resetPw.status === 200 && typeof resetPw.data.newPassword === 'string' && resetPw.data.newPassword.length >= 4, resetPw.data);
+  const loginNewPw = await api('POST', '/api/auth/login', { phone: '+998955559911', password: resetPw.data.newPassword });
+  check('вход с новым паролем после сброса', loginNewPw.status === 200, loginNewPw.data);
+  const delEmp = await api('DELETE', `/api/manager/employees/${empId}`, null, companyToken);
+  check('увольнение сотрудника → ok', delEmp.status === 200 && delEmp.data.ok === true, delEmp.data);
+  const loginAfterDelete = await api('POST', '/api/auth/login', { phone: '+998955559911', password: resetPw.data.newPassword });
+  check('уволенный сотрудник больше не может войти', loginAfterDelete.status === 401, loginAfterDelete.data);
+  const summaryAfterFire = await api('GET', '/api/owner/summary', null, ownerToken);
+  check('увольнение не откатило деньги за уже подтверждённый день (bug 4j)', summaryAfterFire.data.money.korInvoiced === summaryKor.data.money.korInvoiced, summaryAfterFire.data.money);
+
+  console.log('\n── Клиент: отмена и повтор заказа (bug 4c/4d) ──');
+  const repeatLines = await api('GET', `/api/my/orders/${orderId}/repeat-lines`, null, companyToken);
+  check('repeat-lines → строки прошлого заказа', repeatLines.status === 200 && repeatLines.data.lines.length === 2, repeatLines.data);
+  const cancelOrder2 = await api('POST', `/api/orders`, {
+    employeeCount: 5, paymentMethod: 'cash', totalMonthlyPrice: 5 * 55000,
+    lines: [{ date: futureDate(3), setId: 2, setName: 'Бефстроганов', portions: 1, unitPrice: 55000, lineTotal: 5 * 55000 }],
+  }, companyToken);
+  const cancel = await api('POST', `/api/my/orders/${cancelOrder2.data.orderId}/cancel`, null, companyToken);
+  check('клиент отменяет свой new-заказ', cancel.status === 200 && cancel.data.status === 'cancelled', cancel.data);
+  const cancelAgain = await api('POST', `/api/my/orders/${cancelOrder2.data.orderId}/cancel`, null, companyToken);
+  check('повторная отмена уже отменённого → 409', cancelAgain.status === 409, cancelAgain.data);
+  const cancelPaid = await api('POST', `/api/my/orders/${orderId}/cancel`, null, companyToken);
+  check('отменить оплаченный заказ самостоятельно нельзя → 409', cancelPaid.status === 409, cancelPaid.data);
 
   console.log('\n── Дубль имени в компании (запрет) ──');
   const dupReg = await api('POST', '/api/auth/register', {

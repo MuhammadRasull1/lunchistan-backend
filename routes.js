@@ -3,12 +3,12 @@ const crypto = require('node:crypto');
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
 const {
-  MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, auth, adminOnly,
+  MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, destroySession, auth, adminOnly,
 } = require('./auth');
 const {
   isDateString, isLockedDate, isScheduleDateOk, dateKey,
   dayMenuSets, publicUser, employeesCount, companyByCode,
-  todayTz, dayPlan,
+  todayTz, dayPlan, monthBounds,
 } = require('./lib');
 
 /**
@@ -23,6 +23,38 @@ async function isDayConfirmed(companyId, date) {
 }
 
 /**
+ * Деньги за подтверждённый день «Команд» (bug 3.1 из аудита 12.09: раньше
+ * confirm ничего не создавал, кроме отметки+Telegram — выручка «Кор» нигде
+ * не считалась). Пишет застывший снимок plan.perSet (не пересчитывается
+ * задним числом при увольнении — чинит заодно и bug 4j) и пересобирает счёт
+ * компании за календарный месяц из всех снимков этого месяца.
+ */
+async function snapshotConfirmedDay(t, companyId, date, plan) {
+  for (const s of plan.perSet) {
+    await t.query(
+      `INSERT INTO confirmed_day_lines (company_id, date, set_id, set_name, set_price, count, line_total)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (company_id, date, set_id) DO UPDATE SET
+         set_name = EXCLUDED.set_name, set_price = EXCLUDED.set_price,
+         count = EXCLUDED.count, line_total = EXCLUDED.line_total`,
+      [companyId, date, s.setId, s.setName, s.setPrice, s.count, s.setPrice * s.count],
+    );
+  }
+  const { start, end } = monthBounds(date);
+  const totalRow = await t.one(
+    'SELECT COALESCE(SUM(line_total),0)::bigint AS total FROM confirmed_day_lines WHERE company_id = $1 AND date BETWEEN $2 AND $3',
+    [companyId, start, end],
+  );
+  await t.query(
+    `INSERT INTO invoices (company_id, period_start, period_end, total_amount)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (company_id, period_start, period_end)
+     DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()`,
+    [companyId, start, end, totalRow.total],
+  );
+}
+
+/**
  * Простой rate-limit по IP без внешних зависимостей: код команды — 6 символов
  * из 34-символьного алфавита, без throttling его можно перебрать роботом и
  * "войти" сотрудником в чужую компанию (см. ОШИБКИ.md). Состояние в памяти
@@ -31,7 +63,9 @@ async function isDayConfirmed(companyId, date) {
  */
 const authAttempts = new Map(); // ip -> число попыток в текущем окне
 const AUTH_WINDOW_MS = 5 * 60 * 1000;
-const AUTH_MAX_ATTEMPTS = 15;
+// Настраивается через env только ради смоук-теста (растущий файл с каждой
+// сессией упирался в дефолт 15 login/register за 5 минут) — прод не трогаем.
+const AUTH_MAX_ATTEMPTS = Number(process.env.AUTH_MAX_ATTEMPTS) || 15;
 // Раньше окно сбрасывалось таймером setInterval — на верхнем уровне модуля
 // это запрещено рантаймом Cloudflare Workers ("Disallowed operation called
 // within global scope"). Ленивый сброс при первом запросе после AUTH_WINDOW_MS
@@ -178,6 +212,15 @@ function register(app) {
     } catch (err) { next(err); }
   });
 
+  app.post('/api/auth/logout', auth, async (req, res, next) => {
+    try {
+      const header = req.headers.authorization || '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+      await destroySession(token);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
   app.get('/api/me', auth, async (req, res, next) => {
     try {
       const company = req.user.company_id
@@ -284,6 +327,46 @@ function register(app) {
     } catch (err) { next(err); }
   });
 
+  // ── Менеджер: управление сотрудниками (bug 4f/4g, аудит 12.09) ────
+  // Раньше менеджер не мог ни увидеть список сотрудников, ни удалить
+  // уволенного, ни сбросить забытый пароль (у сотрудников нет
+  // почты/телефона для восстановления) — только напрямую в БД.
+  app.get('/api/manager/employees', auth, adminOnly, async (req, res, next) => {
+    try {
+      const rows = await db.many(
+        "SELECT id, name, phone, created_at FROM users WHERE company_id = $1 AND role = 'employee' ORDER BY name",
+        [req.user.company_id],
+      );
+      res.json({ employees: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, createdAt: r.created_at })) });
+    } catch (err) { next(err); }
+  });
+
+  app.delete('/api/manager/employees/:id', auth, adminOnly, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id сотрудника' });
+      const emp = await db.one("SELECT id FROM users WHERE id = $1 AND company_id = $2 AND role = 'employee'", [id, req.user.company_id]);
+      if (!emp) return res.status(404).json({ error: 'Сотрудник не найден в вашей команде' });
+      // confirmed_day_lines — снимок, не связан с users, увольнение на него не влияет (см. 3.1).
+      await db.query('DELETE FROM users WHERE id = $1', [id]);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
+  app.post('/api/manager/employees/:id/reset-password', auth, adminOnly, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id сотрудника' });
+      const emp = await db.one("SELECT id FROM users WHERE id = $1 AND company_id = $2 AND role = 'employee'", [id, req.user.company_id]);
+      if (!emp) return res.status(404).json({ error: 'Сотрудник не найден в вашей команде' });
+      // Забыл пароль = потерял аккаунт навсегда (bug 4g) — у сотрудников нет
+      // почты для восстановления, только менеджер лично выдаёт новый пароль.
+      const newPassword = crypto.randomBytes(4).toString('hex'); // 8 hex-символов, MIN_PASSWORD=4 хватает с запасом
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(newPassword), id]);
+      res.json({ ok: true, newPassword });
+    } catch (err) { next(err); }
+  });
+
   // ── Менеджер: сводка и подтверждение ────────────────────────────
   app.get('/api/manager/dates', auth, adminOnly, async (req, res, next) => {
     try {
@@ -324,7 +407,10 @@ function register(app) {
       if (already) return res.status(409).json({ error: 'День уже подтверждён' });
 
       const plan = await dayPlan(req.user.company_id, date);
-      await db.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
+      await db.tx(async (t) => {
+        await t.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
+        await snapshotConfirmedDay(t, req.user.company_id, date, plan);
+      });
 
       const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
       const fmt = (x) => x.split('-').reverse().join('.');

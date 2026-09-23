@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Добавлено 23.09.2026: токен раньше жил вечно (ОШИБКИ.md/аудит 12.09).
+-- DEFAULT на ALTER считается один раз для уже существующих строк (снимок на
+-- момент миграции) — старые сессии не обнуляются мгновенно, просто получают
+-- те же 30 дней от сегодня.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days');
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
 -- ── Меню ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS menu_sets (
@@ -101,6 +107,52 @@ CREATE TABLE IF NOT EXISTS confirmed_days (
   confirmed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (company_id, date)
 );
+
+-- Снимок подтверждённого дня «Команд» + счета/оплаты. Добавлено 23.09.2026
+-- (аудит 12.09, bug 3.1/4j): подтверждение дня раньше писало только отметку
+-- в confirmed_days и слало Telegram-чек — ни денег, ни долга клиента нигде
+-- не появлялось, а сам план пересчитывался из choices/schedule «на лету»,
+-- поэтому увольнение сотрудника задним числом меняло уже подтверждённый день.
+-- confirmed_day_lines — застывшая копия plan.perSet на момент подтверждения,
+-- invoices/payments — по месяцу на компанию, отдельно от money.ordered/paid
+-- по обычным заказам (те не трогаем, чтобы не сломать то, что уже работает).
+CREATE TABLE IF NOT EXISTS confirmed_day_lines (
+  id         SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  date       DATE NOT NULL,
+  set_id     INTEGER,
+  set_name   TEXT NOT NULL,
+  set_price  BIGINT NOT NULL,
+  count      INTEGER NOT NULL,
+  line_total BIGINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (company_id, date, set_id)
+);
+CREATE INDEX IF NOT EXISTS idx_confirmed_day_lines_company ON confirmed_day_lines(company_id);
+CREATE INDEX IF NOT EXISTS idx_confirmed_day_lines_date    ON confirmed_day_lines(date);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id           SERIAL PRIMARY KEY,
+  company_id   INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  period_start DATE NOT NULL,
+  period_end   DATE NOT NULL,
+  total_amount BIGINT NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','paid','cancelled')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (company_id, period_start, period_end)
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id         SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  amount     BIGINT NOT NULL,
+  method     TEXT,
+  note       TEXT,
+  paid_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 
 -- ── Оптовые заказы (основной клиентский поток) и заявки-лиды ────────
 CREATE TABLE IF NOT EXISTS orders (

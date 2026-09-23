@@ -46,6 +46,14 @@ function dateKey(v) {
   return String(v).slice(0, 10);
 }
 
+/** Границы календарного месяца, которому принадлежит dateStr — период счёта «Кор». */
+function monthBounds(dateStr) {
+  const [y, m] = dateStr.split('-').map(Number);
+  const start = `${y}-${String(m).padStart(2, '0')}-01`;
+  const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); // 0-й день след. месяца = последний день текущего
+  return { start, end };
+}
+
 async function getSet(id) {
   return db.one('SELECT * FROM menu_sets WHERE id = $1', [id]);
 }
@@ -153,7 +161,7 @@ async function dayPlan(companyId, date) {
 module.exports = {
   TZ, CUT_OFF_HOUR, MAX_SCHEDULE_DAYS,
   tzNowParts, todayTz, nowHourTz,
-  isDateString, isLockedDate, isScheduleDateOk, maxDateStr, dateKey,
+  isDateString, isLockedDate, isScheduleDateOk, maxDateStr, dateKey, monthBounds,
   getSet, dayMenuSets,
   publicUser, employeesCount, companyByCode,
   dayPlan,
