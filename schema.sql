@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Добавлено 23.09.2026: токен раньше жил вечно (ОШИБКИ.md/аудит 12.09).
+-- DEFAULT на ALTER считается один раз для уже существующих строк (снимок на
+-- момент миграции) — старые сессии не обнуляются мгновенно, просто получают
+-- те же 30 дней от сегодня.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days');
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
 -- ── Меню ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS menu_sets (

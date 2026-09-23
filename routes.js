@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
 const {
-  MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, auth, adminOnly,
+  MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, destroySession, auth, adminOnly,
 } = require('./auth');
 const {
   isDateString, isLockedDate, isScheduleDateOk, dateKey,
@@ -175,6 +175,15 @@ function register(app) {
       const company = user.company_id ? await db.one('SELECT * FROM companies WHERE id = $1', [user.company_id]) : null;
       const token = await createSession(user.id);
       res.json({ token, user: publicUser(user, company) });
+    } catch (err) { next(err); }
+  });
+
+  app.post('/api/auth/logout', auth, async (req, res, next) => {
+    try {
+      const header = req.headers.authorization || '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+      await destroySession(token);
+      res.json({ ok: true });
     } catch (err) { next(err); }
   });
 

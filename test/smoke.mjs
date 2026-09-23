@@ -152,6 +152,18 @@ try {
   const summary2 = await api('GET', '/api/owner/summary', null, ownerToken);
   check('после оплаты unpaid уменьшился', summary2.data.money.unpaid < summary2.data.money.ordered, summary2.data.money);
 
+  console.log('\n── Разлогин (срок жизни сессии) ──');
+  const logoutReg = await api('POST', '/api/auth/register', {
+    name: 'Разлогин', phone: '+998955559900', password: 'logout123', companyName: 'ЛогинФирма',
+  });
+  const logoutToken = logoutReg.data?.token;
+  const beforeLogout = await api('GET', '/api/me', null, logoutToken);
+  check('токен рабочий до разлогина', beforeLogout.status === 200, beforeLogout.data);
+  const logout = await api('POST', '/api/auth/logout', null, logoutToken);
+  check('logout → ok', logout.status === 200 && logout.data.ok === true, logout.data);
+  const afterLogout = await api('GET', '/api/me', null, logoutToken);
+  check('токен недействителен после разлогина → 401', afterLogout.status === 401, afterLogout.data);
+
   console.log('\n── Смена пароля ──');
   const pw = await api('POST', '/api/auth/password', { oldPassword: 'owner-pass', newPassword: 'new-owner-pass' }, ownerToken);
   check('смена пароля владельца → ok', pw.status === 200 && pw.data.ok === true, pw.data);
