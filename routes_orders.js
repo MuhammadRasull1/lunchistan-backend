@@ -400,6 +400,44 @@ function register(app) {
       res.json(order);
     } catch (err) { next(err); }
   });
+
+  // Отмена своего заказа клиентом (bug 4c, аудит 12.09) — раньше это можно
+  // было сделать только звонком. Отменять можно, пока кухня ещё не начала
+  // готовить (new/confirmed); дальше — только через владельца/звонок.
+  const CANCELLABLE = new Set(['new', 'confirmed']);
+  app.post('/api/my/orders/:id/cancel', auth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id заказа' });
+      const order = await db.one('SELECT * FROM orders WHERE id = $1', [id]);
+      if (!order || order.company_id !== req.user.company_id) return res.status(404).json({ error: 'Заказ не найден' });
+      if (!CANCELLABLE.has(order.status)) {
+        return res.status(409).json({ error: `Заказ уже "${order.status}" — отменить самостоятельно нельзя, свяжитесь с нами` });
+      }
+      await db.tx(async (t) => {
+        await t.query("UPDATE orders SET status = 'cancelled', updated_at = now() WHERE id = $1", [id]);
+        await t.query('INSERT INTO order_status_log (order_id, status, note, changed_by) VALUES ($1,$2,$3,$4)',
+          [id, 'cancelled', 'Отменён клиентом', req.user.id]);
+      });
+      sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} отменён клиентом`).catch(() => {});
+      res.json(await orderWithLines(id));
+    } catch (err) { next(err); }
+  });
+
+  // Повтор заказа (bug 4d) — та же дата/сет пока не изменились, лишь позже
+  // подрежется по offeredSetsByDate, как любой обычный POST /api/orders.
+  app.get('/api/my/orders/:id/repeat-lines', auth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const order = Number.isInteger(id) ? await orderWithLines(id) : null;
+      if (!order || order.companyId !== req.user.company_id) return res.status(404).json({ error: 'Заказ не найден' });
+      res.json({
+        lines: order.lines.map((l) => ({ setId: l.setId, setName: l.setName, mainDish: l.mainDish, salad: l.salad, beverage: l.beverage, portions: l.portions })),
+        paymentMethod: order.paymentMethod,
+        address: order.address,
+      });
+    } catch (err) { next(err); }
+  });
 }
 
 module.exports = { register, orderWithLines };

@@ -1,11 +1,20 @@
 /** Сводка владельца (дядя): заказы, деньги/долги, лист для кухни, новые заявки. */
 const db = require('./db');
 const { sendTelegramReceipt } = require('./telegram');
+const { sendClientReceipt } = require('./bot');
 const { auth, ownerOnly } = require('./auth');
 const { isDateString, dateKey, todayTz } = require('./lib');
 const { orderWithLines } = require('./routes_orders');
 
 const STATUSES = ['new', 'confirmed', 'in_progress', 'delivered', 'paid', 'cancelled'];
+const STATUS_LABELS = {
+  new: 'новый',
+  confirmed: 'подтверждён',
+  in_progress: 'готовится',
+  delivered: 'доставлен',
+  paid: 'оплачен',
+  cancelled: 'отменён',
+};
 
 function rangeFromQuery(q) {
   const today = todayTz();
@@ -42,11 +51,12 @@ function register(app) {
 
       // «Кор»: раньше нигде не считалось (bug 3.1, аудит 12.09) — теперь отдельной
       // строкой, не смешивая со «money» обычных заказов (тот путь не трогаем).
+      // Две независимые подзапроса, не JOIN: у счёта может быть несколько
+      // платежей, и SUM(total_amount) через JOIN задвоился бы по числу платежей.
       const korMoney = await db.one(`
         SELECT
-          COALESCE(SUM(i.total_amount), 0)::bigint AS invoiced,
-          COALESCE(SUM(p.amount), 0)::bigint AS paid
-        FROM invoices i LEFT JOIN payments p ON p.invoice_id = i.id`);
+          COALESCE((SELECT SUM(total_amount) FROM invoices), 0)::bigint AS invoiced,
+          COALESCE((SELECT SUM(amount) FROM payments), 0)::bigint AS paid`);
       const korInvoiced = Number(korMoney.invoiced);
       const korPaid = Number(korMoney.paid);
 
@@ -181,6 +191,18 @@ function register(app) {
         try {
           await sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} → *${status}*${note ? `\n${note}` : ''}`);
         } catch { /* не критично */ }
+      }
+      // Раньше клиент вообще не узнавал о смене статуса — только владелец
+      // (аудит 12.09, bug 4b). Пишем ему в личку тем же ботом, что и чек заказа.
+      if (order.tg_user_id) {
+        const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const label = STATUS_LABELS[status] || status;
+        const text = [
+          `🔔 <b>Заказ ORD-${String(id).padStart(4, '0')}</b>`,
+          `Статус: ${esc(label)}`,
+          ...(note ? [esc(note)] : []),
+        ].join('\n');
+        sendClientReceipt(order.tg_user_id, text).catch(() => {});
       }
       res.json(await orderWithLines(id));
     } catch (err) { next(err); }

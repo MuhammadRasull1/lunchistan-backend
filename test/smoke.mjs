@@ -22,6 +22,7 @@ const env = {
   OWNER_PASSWORD: 'owner-pass',
   TELEGRAM_BOT_TOKEN: '',
   CHAT_ID: '',
+  AUTH_MAX_ATTEMPTS: '100',
 };
 
 const server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -199,6 +200,40 @@ try {
   check('частичная оплата → paidAmount учтён, статус ещё open', payment.status === 200 && payment.data.paidAmount === partial && payment.data.status === 'open', payment.data);
   const fullPayment = await api('POST', `/api/owner/invoices/${invoiceId}/payments`, { amount: payment.data.unpaidAmount, method: 'card' }, ownerToken);
   check('полная оплата → статус paid', fullPayment.status === 200 && fullPayment.data.status === 'paid' && fullPayment.data.unpaidAmount === 0, fullPayment.data);
+
+  console.log('\n── Управление сотрудниками менеджером (bug 4f/4g) ──');
+  // Отдельный одноразовый сотрудник — не трогаем «Сотрудник» из более ранних
+  // тестов (на него завязана регрессия на дубль имени ниже по файлу).
+  const tempEmpReg = await api('POST', '/api/auth/register', {
+    name: 'Временный', phone: '+998955559911', password: 'temp1234', companyCode: reg.data.user.companyCode,
+  });
+  const empList = await api('GET', '/api/manager/employees', null, companyToken);
+  check('менеджер видит список сотрудников', empList.status === 200 && empList.data.employees.some((e) => e.name === 'Временный'), empList.data);
+  const empId = tempEmpReg.data.user.id;
+  const resetPw = await api('POST', `/api/manager/employees/${empId}/reset-password`, {}, companyToken);
+  check('сброс пароля сотрудника → новый пароль', resetPw.status === 200 && typeof resetPw.data.newPassword === 'string' && resetPw.data.newPassword.length >= 4, resetPw.data);
+  const loginNewPw = await api('POST', '/api/auth/login', { phone: '+998955559911', password: resetPw.data.newPassword });
+  check('вход с новым паролем после сброса', loginNewPw.status === 200, loginNewPw.data);
+  const delEmp = await api('DELETE', `/api/manager/employees/${empId}`, null, companyToken);
+  check('увольнение сотрудника → ok', delEmp.status === 200 && delEmp.data.ok === true, delEmp.data);
+  const loginAfterDelete = await api('POST', '/api/auth/login', { phone: '+998955559911', password: resetPw.data.newPassword });
+  check('уволенный сотрудник больше не может войти', loginAfterDelete.status === 401, loginAfterDelete.data);
+  const summaryAfterFire = await api('GET', '/api/owner/summary', null, ownerToken);
+  check('увольнение не откатило деньги за уже подтверждённый день (bug 4j)', summaryAfterFire.data.money.korInvoiced === summaryKor.data.money.korInvoiced, summaryAfterFire.data.money);
+
+  console.log('\n── Клиент: отмена и повтор заказа (bug 4c/4d) ──');
+  const repeatLines = await api('GET', `/api/my/orders/${orderId}/repeat-lines`, null, companyToken);
+  check('repeat-lines → строки прошлого заказа', repeatLines.status === 200 && repeatLines.data.lines.length === 2, repeatLines.data);
+  const cancelOrder2 = await api('POST', `/api/orders`, {
+    employeeCount: 5, paymentMethod: 'cash', totalMonthlyPrice: 5 * 55000,
+    lines: [{ date: futureDate(3), setId: 2, setName: 'Бефстроганов', portions: 1, unitPrice: 55000, lineTotal: 5 * 55000 }],
+  }, companyToken);
+  const cancel = await api('POST', `/api/my/orders/${cancelOrder2.data.orderId}/cancel`, null, companyToken);
+  check('клиент отменяет свой new-заказ', cancel.status === 200 && cancel.data.status === 'cancelled', cancel.data);
+  const cancelAgain = await api('POST', `/api/my/orders/${cancelOrder2.data.orderId}/cancel`, null, companyToken);
+  check('повторная отмена уже отменённого → 409', cancelAgain.status === 409, cancelAgain.data);
+  const cancelPaid = await api('POST', `/api/my/orders/${orderId}/cancel`, null, companyToken);
+  check('отменить оплаченный заказ самостоятельно нельзя → 409', cancelPaid.status === 409, cancelPaid.data);
 
   console.log('\n── Дубль имени в компании (запрет) ──');
   const dupReg = await api('POST', '/api/auth/register', {

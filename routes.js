@@ -63,7 +63,9 @@ async function snapshotConfirmedDay(t, companyId, date, plan) {
  */
 const authAttempts = new Map(); // ip -> число попыток в текущем окне
 const AUTH_WINDOW_MS = 5 * 60 * 1000;
-const AUTH_MAX_ATTEMPTS = 15;
+// Настраивается через env только ради смоук-теста (растущий файл с каждой
+// сессией упирался в дефолт 15 login/register за 5 минут) — прод не трогаем.
+const AUTH_MAX_ATTEMPTS = Number(process.env.AUTH_MAX_ATTEMPTS) || 15;
 // Раньше окно сбрасывалось таймером setInterval — на верхнем уровне модуля
 // это запрещено рантаймом Cloudflare Workers ("Disallowed operation called
 // within global scope"). Ленивый сброс при первом запросе после AUTH_WINDOW_MS
@@ -322,6 +324,46 @@ function register(app) {
         [req.user.id, date, set.id, set.name, set.price],
       );
       res.json({ date, choice: { setId: set.id, setName: set.name, setPrice: set.price } });
+    } catch (err) { next(err); }
+  });
+
+  // ── Менеджер: управление сотрудниками (bug 4f/4g, аудит 12.09) ────
+  // Раньше менеджер не мог ни увидеть список сотрудников, ни удалить
+  // уволенного, ни сбросить забытый пароль (у сотрудников нет
+  // почты/телефона для восстановления) — только напрямую в БД.
+  app.get('/api/manager/employees', auth, adminOnly, async (req, res, next) => {
+    try {
+      const rows = await db.many(
+        "SELECT id, name, phone, created_at FROM users WHERE company_id = $1 AND role = 'employee' ORDER BY name",
+        [req.user.company_id],
+      );
+      res.json({ employees: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, createdAt: r.created_at })) });
+    } catch (err) { next(err); }
+  });
+
+  app.delete('/api/manager/employees/:id', auth, adminOnly, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id сотрудника' });
+      const emp = await db.one("SELECT id FROM users WHERE id = $1 AND company_id = $2 AND role = 'employee'", [id, req.user.company_id]);
+      if (!emp) return res.status(404).json({ error: 'Сотрудник не найден в вашей команде' });
+      // confirmed_day_lines — снимок, не связан с users, увольнение на него не влияет (см. 3.1).
+      await db.query('DELETE FROM users WHERE id = $1', [id]);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
+  app.post('/api/manager/employees/:id/reset-password', auth, adminOnly, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id сотрудника' });
+      const emp = await db.one("SELECT id FROM users WHERE id = $1 AND company_id = $2 AND role = 'employee'", [id, req.user.company_id]);
+      if (!emp) return res.status(404).json({ error: 'Сотрудник не найден в вашей команде' });
+      // Забыл пароль = потерял аккаунт навсегда (bug 4g) — у сотрудников нет
+      // почты для восстановления, только менеджер лично выдаёт новый пароль.
+      const newPassword = crypto.randomBytes(4).toString('hex'); // 8 hex-символов, MIN_PASSWORD=4 хватает с запасом
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(newPassword), id]);
+      res.json({ ok: true, newPassword });
     } catch (err) { next(err); }
   });
 
