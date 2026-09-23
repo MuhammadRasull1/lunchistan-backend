@@ -8,7 +8,7 @@ const {
 const {
   isDateString, isLockedDate, isScheduleDateOk, dateKey,
   dayMenuSets, publicUser, employeesCount, companyByCode,
-  todayTz, dayPlan,
+  todayTz, dayPlan, monthBounds,
 } = require('./lib');
 
 /**
@@ -20,6 +20,38 @@ async function isDayConfirmed(companyId, date) {
   if (!companyId) return false;
   const row = await db.one('SELECT 1 FROM confirmed_days WHERE company_id = $1 AND date = $2', [companyId, date]);
   return Boolean(row);
+}
+
+/**
+ * Деньги за подтверждённый день «Команд» (bug 3.1 из аудита 12.09: раньше
+ * confirm ничего не создавал, кроме отметки+Telegram — выручка «Кор» нигде
+ * не считалась). Пишет застывший снимок plan.perSet (не пересчитывается
+ * задним числом при увольнении — чинит заодно и bug 4j) и пересобирает счёт
+ * компании за календарный месяц из всех снимков этого месяца.
+ */
+async function snapshotConfirmedDay(t, companyId, date, plan) {
+  for (const s of plan.perSet) {
+    await t.query(
+      `INSERT INTO confirmed_day_lines (company_id, date, set_id, set_name, set_price, count, line_total)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (company_id, date, set_id) DO UPDATE SET
+         set_name = EXCLUDED.set_name, set_price = EXCLUDED.set_price,
+         count = EXCLUDED.count, line_total = EXCLUDED.line_total`,
+      [companyId, date, s.setId, s.setName, s.setPrice, s.count, s.setPrice * s.count],
+    );
+  }
+  const { start, end } = monthBounds(date);
+  const totalRow = await t.one(
+    'SELECT COALESCE(SUM(line_total),0)::bigint AS total FROM confirmed_day_lines WHERE company_id = $1 AND date BETWEEN $2 AND $3',
+    [companyId, start, end],
+  );
+  await t.query(
+    `INSERT INTO invoices (company_id, period_start, period_end, total_amount)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (company_id, period_start, period_end)
+     DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()`,
+    [companyId, start, end, totalRow.total],
+  );
 }
 
 /**
@@ -333,7 +365,10 @@ function register(app) {
       if (already) return res.status(409).json({ error: 'День уже подтверждён' });
 
       const plan = await dayPlan(req.user.company_id, date);
-      await db.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
+      await db.tx(async (t) => {
+        await t.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
+        await snapshotConfirmedDay(t, req.user.company_id, date, plan);
+      });
 
       const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
       const fmt = (x) => x.split('-').reverse().join('.');

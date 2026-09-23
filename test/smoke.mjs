@@ -183,6 +183,23 @@ try {
   const mgrReport = await api('GET', `/api/manager/report?date=${futureDate(5)}`, null, companyToken);
   check('менеджер видит план дня', mgrReport.status === 200 && mgrReport.data.scheduled === 1, mgrReport.data);
 
+  console.log('\n── «Кор»: подтверждение дня создаёт деньги (bug 3.1) ──');
+  const confirmDate = futureDate(6);
+  const confirm = await api('POST', `/api/manager/report/${confirmDate}/confirm`, {}, companyToken);
+  check('confirm → 201', confirm.status === 201 && confirm.data.success === true, confirm.data);
+  const summaryKor = await api('GET', '/api/owner/summary', null, ownerToken);
+  check('в сводке появился korInvoiced > 0', summaryKor.data?.money?.korInvoiced > 0, summaryKor.data?.money);
+  check('korUnpaid = korInvoiced (ещё не оплачено)', summaryKor.data.money.korUnpaid === summaryKor.data.money.korInvoiced, summaryKor.data.money);
+  const invoices = await api('GET', '/api/owner/invoices', null, ownerToken);
+  check('owner/invoices → есть счёт со статусом open', invoices.status === 200 && invoices.data.invoices.some((i) => i.status === 'open' && i.totalAmount > 0), invoices.data);
+  const invoiceRow = invoices.data.invoices.find((i) => i.totalAmount > 0);
+  const invoiceId = invoiceRow.id;
+  const partial = Math.floor(invoiceRow.totalAmount / 2) || 1;
+  const payment = await api('POST', `/api/owner/invoices/${invoiceId}/payments`, { amount: partial, method: 'card' }, ownerToken);
+  check('частичная оплата → paidAmount учтён, статус ещё open', payment.status === 200 && payment.data.paidAmount === partial && payment.data.status === 'open', payment.data);
+  const fullPayment = await api('POST', `/api/owner/invoices/${invoiceId}/payments`, { amount: payment.data.unpaidAmount, method: 'card' }, ownerToken);
+  check('полная оплата → статус paid', fullPayment.status === 200 && fullPayment.data.status === 'paid' && fullPayment.data.unpaidAmount === 0, fullPayment.data);
+
   console.log('\n── Дубль имени в компании (запрет) ──');
   const dupReg = await api('POST', '/api/auth/register', {
     name: '  сотрудник  ', phone: '+998955556688', password: 'emp1234', companyCode: reg.data.user.companyCode,

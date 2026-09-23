@@ -40,6 +40,16 @@ function register(app) {
       const ordered = Number(money.ordered);
       const paid = Number(money.paid);
 
+      // «Кор»: раньше нигде не считалось (bug 3.1, аудит 12.09) — теперь отдельной
+      // строкой, не смешивая со «money» обычных заказов (тот путь не трогаем).
+      const korMoney = await db.one(`
+        SELECT
+          COALESCE(SUM(i.total_amount), 0)::bigint AS invoiced,
+          COALESCE(SUM(p.amount), 0)::bigint AS paid
+        FROM invoices i LEFT JOIN payments p ON p.invoice_id = i.id`);
+      const korInvoiced = Number(korMoney.invoiced);
+      const korPaid = Number(korMoney.paid);
+
       // Лист для кухни по датам диапазона (оптовые/подтверждённые заказы)
       const kitchenRows = await db.many(`
         SELECT ol.date::text AS date, ol.set_name,
@@ -75,7 +85,7 @@ function register(app) {
       res.json({
         range: { from, to },
         orders: { total: ordersTotal, byStatus },
-        money: { ordered, paid, unpaid: ordered - paid },
+        money: { ordered, paid, unpaid: ordered - paid, korInvoiced, korPaid, korUnpaid: korInvoiced - korPaid },
         byDate: [...byDateMap.values()],
         teams: { pickedPortions: teams.picked, amount: Number(teams.amount) },
         leads: {
@@ -173,6 +183,65 @@ function register(app) {
         } catch { /* не критично */ }
       }
       res.json(await orderWithLines(id));
+    } catch (err) { next(err); }
+  });
+
+  // ── Счета «Кор» (confirmed_day_lines/invoices/payments, bug 3.1) ──
+  app.get('/api/owner/invoices', auth, ownerOnly, async (req, res, next) => {
+    try {
+      const rows = await db.many(`
+        SELECT i.id, i.company_id, c.name AS company_name, i.period_start::text, i.period_end::text,
+               i.total_amount, i.status,
+               COALESCE(SUM(p.amount), 0)::bigint AS paid_amount
+        FROM invoices i
+        JOIN companies c ON c.id = i.company_id
+        LEFT JOIN payments p ON p.invoice_id = i.id
+        GROUP BY i.id, c.name
+        ORDER BY i.period_start DESC, c.name`);
+      res.json({
+        invoices: rows.map((r) => ({
+          id: r.id,
+          companyId: r.company_id,
+          companyName: r.company_name,
+          periodStart: r.period_start,
+          periodEnd: r.period_end,
+          totalAmount: Number(r.total_amount),
+          paidAmount: Number(r.paid_amount),
+          unpaidAmount: Number(r.total_amount) - Number(r.paid_amount),
+          status: r.status,
+        })),
+      });
+    } catch (err) { next(err); }
+  });
+
+  app.post('/api/owner/invoices/:id/payments', auth, ownerOnly, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const { amount, method, note } = req.body || {};
+      const amountInt = Number(amount);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id счёта' });
+      if (!Number.isFinite(amountInt) || amountInt <= 0) return res.status(400).json({ error: 'Поле "amount" должно быть положительным числом' });
+      const invoice = await db.one('SELECT * FROM invoices WHERE id = $1', [id]);
+      if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+
+      await db.tx(async (t) => {
+        await t.query('INSERT INTO payments (invoice_id, amount, method, note) VALUES ($1,$2,$3,$4)',
+          [id, amountInt, typeof method === 'string' ? method : null, typeof note === 'string' ? note : null]);
+        const totalPaid = await t.one('SELECT COALESCE(SUM(amount),0)::bigint AS s FROM payments WHERE invoice_id = $1', [id]);
+        if (Number(totalPaid.s) >= Number(invoice.total_amount)) {
+          await t.query("UPDATE invoices SET status = 'paid', updated_at = now() WHERE id = $1", [id]);
+        }
+      });
+
+      const updated = await db.one('SELECT * FROM invoices WHERE id = $1', [id]);
+      const paidRow = await db.one('SELECT COALESCE(SUM(amount),0)::bigint AS s FROM payments WHERE invoice_id = $1', [id]);
+      res.json({
+        id: updated.id,
+        totalAmount: Number(updated.total_amount),
+        paidAmount: Number(paidRow.s),
+        unpaidAmount: Number(updated.total_amount) - Number(paidRow.s),
+        status: updated.status,
+      });
     } catch (err) { next(err); }
   });
 }
