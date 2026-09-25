@@ -5,3 +5,6 @@ node_modules/
 *.db-wal
 *.db-shm
 .pglite/
+test/.e2e-shots/
+.pglite-e2e/
+docs/security-audit-*.md
