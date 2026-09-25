@@ -23,6 +23,7 @@ const env = {
   TELEGRAM_BOT_TOKEN: '',
   CHAT_ID: '',
   AUTH_MAX_ATTEMPTS: '100',
+  LOGIN_MAX_FAILS: '3',
 };
 
 const server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -267,6 +268,51 @@ try {
   check('неразличимые тёзки → 409 + needCompanyCode', ambiguous.status === 409 && ambiguous.data.needCompanyCode === true, ambiguous.data);
   const resolved = await api('POST', '/api/auth/login', { name: 'Одинаковый', password: 'same1234', companyCode: code2 });
   check('с кодом команды вход проходит', resolved.status === 200 && resolved.data.user.companyCode === code2, resolved.data);
+
+  console.log('\n── Аудит безопасности 25.09 (регрессия) ──');
+  const ownerCode = ownerLogin.data?.user?.companyCode;
+  const intruder = await api('POST', '/api/auth/register', { name: 'Посторонний', password: 'intr1234', companyCode: ownerCode });
+  check('в компанию владельца по коду не вступить (В-1)', ownerCode && ownerCode !== 'LUNCHISTAN' && intruder.status === 400, { ownerCode, intruder: intruder.data });
+  const brand = await api('POST', '/api/auth/register', { name: 'Посторонний', password: 'intr1234', companyCode: 'lunchistan' });
+  check('код-бренд «lunchistan» не работает (В-1)', brand.status === 400, brand.data);
+
+  const empOrders = await api('GET', '/api/my/orders', null, empToken);
+  check('сотрудник не видит все заказы компании (В-2)', empOrders.status === 403, empOrders.data);
+  const empCancel = await api('POST', `/api/my/orders/${orderId}/cancel`, null, empToken);
+  check('сотрудник не отменяет заказ компании (В-2)', empCancel.status === 403, empCancel.data);
+  const empAddr = await api('PUT', '/api/my/address', { lat: 41.3, lon: 69.2, label: 'чужой' }, empToken);
+  check('сотрудник не меняет адрес компании (В-2)', empAddr.status === 403, empAddr.data);
+
+  const shortPw = await api('POST', '/api/auth/register', { name: 'Короткий', password: '12345', companyName: 'Коротко' });
+  check('пароль короче 6 символов не принимается (В-3)', shortPw.status === 400, shortPw.data);
+  const lockReg = await api('POST', '/api/auth/register', { name: 'Замок', phone: '+998955550777', password: 'lock1234', companyName: 'Замок' });
+  for (let i = 0; i < 3; i++) await api('POST', '/api/auth/login', { phone: '+998955550777', password: 'wrong' });
+  const locked = await api('POST', '/api/auth/login', { phone: '+998955550777', password: 'lock1234' });
+  check('после 3 неверных попыток аккаунт временно закрыт (В-3)', lockReg.status === 201 && locked.status === 429, locked.data);
+
+  const pastDate = futureDate(-2);
+  await api('PUT', `/api/owner/daily-menu/${pastDate}`, { setIds: [1] }, ownerToken);
+  const pastOrder = await api('POST', '/api/orders', {
+    employeeCount: 1, lines: [{ date: pastDate, setId: 1, setName: 'Аджахури с курицей', portions: 1 }],
+  }, companyToken);
+  check('заказ на прошедшую дату → 400 (М-1)', pastOrder.status === 400, pastOrder.data);
+  const fracOrder = await api('POST', '/api/orders', {
+    employeeCount: 1, lines: [{ date: futureDate(2), setId: 1, setName: 'Аджахури с курицей', portions: 1.5 }],
+  }, companyToken);
+  check('дробные порции → 400, а не 500 (М-2)', fracOrder.status === 400, fracOrder.data);
+  const cheapLead = await api('POST', '/api/orders', {
+    contactName: 'Лид', contactPhone: '+998900001122', totalMonthlyPrice: 1,
+    lines: [{ date: futureDate(2), setName: 'Что-то своё', portions: 1 }],
+  });
+  const cheapLeadRow = cheapLead.data?.orderId && (await api('GET', `/api/owner/orders/${cheapLead.data.orderId}`, null, ownerToken)).data;
+  check('сумма заявки не берётся у клиента (М-3)', cheapLead.status === 201 && Number(cheapLeadRow?.totalAmount) === 0, { lead: cheapLead.data, row: cheapLeadRow?.totalAmount });
+
+  const noPhone = await api('POST', '/api/auth/register', { name: 'Безномера', password: 'nophone1', companyName: 'Без номера' });
+  const noPhoneOrder = await api('POST', '/api/orders', {
+    employeeCount: 1, lines: [{ date: futureDate(2), setId: 1, setName: 'Аджахури с курицей', portions: 1 }],
+  }, noPhone.data?.token);
+  const noPhoneRow = noPhoneOrder.data?.orderId && (await api('GET', `/api/owner/orders/${noPhoneOrder.data.orderId}`, null, ownerToken)).data;
+  check('служебный user_… не попадает в телефон заказа', noPhoneOrder.status === 201 && noPhoneRow && 'contactPhone' in noPhoneRow && !String(noPhoneRow.contactPhone ?? '').startsWith('user_'), noPhoneRow?.contactPhone);
 } catch (err) {
   failed++;
   console.error('\n💥 Тест упал:', err);

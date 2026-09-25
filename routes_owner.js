@@ -1,6 +1,6 @@
 /** Сводка владельца (дядя): заказы, деньги/долги, лист для кухни, новые заявки. */
 const db = require('./db');
-const { sendTelegramReceipt } = require('./telegram');
+const { sendTelegramReceipt, esc } = require('./telegram');
 const { sendClientReceipt } = require('./bot');
 const { auth, ownerOnly } = require('./auth');
 const { isDateString, dateKey, todayTz } = require('./lib');
@@ -189,7 +189,7 @@ function register(app) {
 
       if (status === 'confirmed' || status === 'cancelled') {
         try {
-          await sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} → *${status}*${note ? `\n${note}` : ''}`);
+          await sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} → <b>${esc(status)}</b>${note ? `\n${esc(note)}` : ''}`);
         } catch { /* не критично */ }
       }
       // Раньше клиент вообще не узнавал о смене статуса — только владелец

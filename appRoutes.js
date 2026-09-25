@@ -252,6 +252,10 @@ function registerAppRoutes(app) {
         return res.status(401).json({ error: 'Текущий пароль неверный' });
       }
       await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(newPassword), req.user.id]);
+      // остальные устройства выходят — иначе украденная сессия жила бы ещё 30 дней (аудит 25.09, М-5)
+      const header = req.headers.authorization || '';
+      const current = header.startsWith('Bearer ') ? header.slice(7) : '';
+      await db.query('DELETE FROM sessions WHERE user_id = $1 AND token <> $2', [req.user.id, current]);
       res.json({ ok: true });
     } catch (err) { next(err); }
   });

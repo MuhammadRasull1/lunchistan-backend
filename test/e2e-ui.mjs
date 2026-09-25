@@ -87,7 +87,7 @@ try {
   await client.getByRole('button', { name: 'Начать' }).click();
   await client.locator('input').first().fill('Тест Клиент');
   await client.locator('button.ob-next').click();
-  await client.locator('input[type=password]').fill('pass1234');
+  await client.locator('input[type=password]').fill('pass1234'); // ≥ 6 символов (MIN_PASSWORD)
   await client.locator('button.ob-next').click();
   await client.locator('.ob-path').nth(1).click();
   const fields = client.locator('form input:not([type=checkbox])');
@@ -117,11 +117,17 @@ try {
   check('на оба дня выбраны блюда', (await client.getByRole('button', { name: 'Изменить блюдо' }).count()) === 2);
   await shot(client, '02-days-chosen');
 
-  // Вне Telegram своя кнопка «Оформить» скрыта (приложение надеется на Telegram MainButton) —
-  // имитируем нажатие MainButton, как это делает клиент Telegram.
-  await client.evaluate(() => window.Telegram.WebView.receiveEvent('main_button_pressed'));
+  // В обычном браузере своя кнопка «Оформить» должна быть видна (до 25.09 пряталась в расчёте на Telegram MainButton)
+  const orderBtn = client.getByRole('button', { name: 'Оформить предзаказ' });
+  check('в браузере видна кнопка «Оформить предзаказ»', await orderBtn.isVisible().catch(() => false));
+  await orderBtn.click();
   await client.getByRole('button', { name: /Оплатить/ }).waitFor();
-  await client.locator('input').nth(1).fill('+998901234567');
+  await client.evaluate(() => window.scrollTo(0, 0)); await sleep(400);
+  await shot(client, '03a-cart-top');
+  const phoneField = client.locator('input').nth(1);
+  check('телефон в корзине не подставлен служебным user_…', !(await phoneField.inputValue()).startsWith('user_'), await phoneField.inputValue());
+  check('в корзине склонения: «2 дня · 1 сотрудник · 2 порции»', (await client.getByText('2 дня · 1 сотрудник · 2 порции').count()) > 0);
+  await phoneField.fill('+998901234567');
   await client.getByRole('button', { name: 'Наличными курьеру' }).click();
   await shot(client, '03-cart');
   const order = client.waitForResponse((r) => r.url().endsWith('/api/orders') && r.request().method() === 'POST');

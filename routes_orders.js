@@ -1,9 +1,17 @@
 /** Оптовые заказы (основной клиентский поток) + заявки-лиды с лендинга. */
 const db = require('./db');
-const { sendTelegramReceipt } = require('./telegram');
+const { sendTelegramReceipt, esc } = require('./telegram');
 const { sendClientReceipt } = require('./bot');
-const { auth, optionalAuth, verifiedTelegramUserFromRequest } = require('./auth');
-const { isDateString, dateKey } = require('./lib');
+const { auth, adminOnly, optionalAuth, verifiedTelegramUserFromRequest } = require('./auth');
+const { isDateString, dateKey, isLockedDate } = require('./lib');
+const rateLimit = require('./ratelimit');
+
+// Заявок без входа с одного IP в час — иначе скрипт заваливает чат кухни (аудит 25.09, В-5)
+const LEAD_WINDOW_MS = 3600 * 1000;
+const LEAD_MAX_PER_WINDOW = Number(process.env.LEAD_MAX_PER_HOUR) || 5;
+const MAX_QTY = 1000; // порций на сотрудника / сотрудников в заказе
+// Регистрация без телефона даёт служебный user_<hex> (routes.js) — это не телефон для кухни
+const realPhone = (p) => (p && !String(p).startsWith('user_') ? p : null);
 const { quote } = require('./logistics');
 
 const PAYMENT_METHODS = new Set(['corporate', 'card', 'cash']);
@@ -66,6 +74,13 @@ function validate(lines, body) {
     else if (seen.has(l.date)) errors.push(`Дубликат даты: ${l.date}`);
     else seen.add(l.date);
     if (!nonEmpty(l.setName)) errors.push('У одной из строк нет блюда');
+    // прошедшие даты и сегодня после 10:00 — как в «Командах» (аудит 25.09, М-1)
+    if (isDateString(l.date) && isLockedDate(l.date)) errors.push(`Дата ${l.date} уже недоступна для заказа`);
+    // дробные порции раньше давали 500 из БД (М-2)
+    if (!Number.isInteger(l.portions) || l.portions < 1 || l.portions > MAX_QTY) errors.push('Порций на сотрудника — целое число от 1 до 1000');
+  }
+  if (body.employeeCount != null && (!Number.isInteger(body.employeeCount) || body.employeeCount < 1 || body.employeeCount > MAX_QTY)) {
+    errors.push('Число сотрудников — целое от 1 до 1000');
   }
   if (body.paymentMethod && !PAYMENT_METHODS.has(body.paymentMethod)) {
     errors.push('Неизвестный способ оплаты');
@@ -77,38 +92,38 @@ function receiptText(order, lines) {
   const dt = new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' });
   const fmtDate = (v) => String(v).split('-').reverse().join('.');
   const out = [
-    order.is_lead ? '📨 *Новая заявка Lunchistan*' : '🍱 *Новый заказ Lunchistan*',
+    order.is_lead ? '📨 <b>Новая заявка Lunchistan</b>' : '🍱 <b>Новый заказ Lunchistan</b>',
     `🕒 ${dt}`,
     `🔖 №${order.number}`,
     '',
   ];
   if (order.company_name || order.contact_name) {
-    out.push(`🏢 ${order.company_name || '—'}`);
-    out.push(`👤 ${order.contact_name || '—'}${order.contact_phone ? ` · ${order.contact_phone}` : ''}`);
+    out.push(`🏢 ${esc(order.company_name || '—')}`);
+    out.push(`👤 ${esc(order.contact_name || '—')}${order.contact_phone ? ` · ${esc(order.contact_phone)}` : ''}`);
     // Ссылка на реальный аккаунт Telegram: username → t.me, иначе прямой ID.
     const tgLink = order.tg_username
       ? `https://t.me/${order.tg_username.replace(/^@/, '')}`
       : order.tg_user_id ? `tg://user?id=${order.tg_user_id}` : null;
-    if (tgLink) out.push(`✈️ ${tgLink}`);
+    if (tgLink) out.push(`✈️ ${esc(tgLink)}`);
     out.push('');
   }
   // Доставка «до двери»: адрес + детали + ссылка на карту
   if (order.dest_lat != null && order.dest_lon != null) {
     const mapUrl = `https://yandex.com/maps/?pt=${order.dest_lon},${order.dest_lat}&z=17&l=map`;
-    out.push(`🚚 Доставка: ${order.address || 'по координатам'}${order.dest_detail ? `\n   ${order.dest_detail}` : ''}`);
+    out.push(`🚚 Доставка: ${esc(order.address || 'по координатам')}${order.dest_detail ? `\n   ${esc(order.dest_detail)}` : ''}`);
     out.push(`🗺 ${mapUrl}`);
     if (order.delivery_fee) out.push(`🚗 Доставка: ${Number(order.delivery_fee).toLocaleString('ru-RU')} UZS`);
     out.push('');
   }
   out.push('🧾 Состав:');
   for (const l of lines) {
-    out.push(`📅 ${fmtDate(l.date)} — ${l.setName} × ${l.portions} порц./сотр.`);
+    out.push(`📅 ${fmtDate(l.date)} — ${esc(l.setName)} × ${l.portions} порц./сотр.`);
   }
   out.push('');
   if (order.employee_count) out.push(`👥 Сотрудников: ${order.employee_count}`);
-  if (order.payment_method) out.push(`💳 Оплата: ${order.payment_method}`);
+  if (order.payment_method) out.push(`💳 Оплата: ${esc(order.payment_method)}`);
   if (order.total_amount) out.push(`💰 Итого: ${Number(order.total_amount).toLocaleString('ru-RU')} UZS`);
-  if (order.comment) out.push(`💬 ${order.comment}`);
+  if (order.comment) out.push(`💬 ${esc(order.comment)}`);
   return out.join('\n');
 }
 
@@ -163,8 +178,11 @@ function register(app) {
       if (errors.length) return res.status(400).json({ error: 'Некорректные данные заказа', details: errors });
 
       const authed = Boolean(req.user);
+      if (!authed && (await rateLimit.hit(`lead:${req.ip || 'unknown'}`, LEAD_WINDOW_MS)) > LEAD_MAX_PER_WINDOW) {
+        return res.status(429).json({ error: 'Слишком много заявок. Попробуйте позже или позвоните нам.' });
+      }
       const contactName = nonEmpty(body.contactName) ? body.contactName.trim() : (req.user ? req.user.name : null);
-      const contactPhone = nonEmpty(body.contactPhone) ? body.contactPhone.trim() : (req.user ? req.user.phone : null);
+      const contactPhone = realPhone(nonEmpty(body.contactPhone) ? body.contactPhone.trim() : (req.user ? req.user.phone : null));
 
       let companyId = null;
       let companyName = nonEmpty(body.companyName) ? body.companyName.trim() : null;
@@ -211,15 +229,15 @@ function register(app) {
             l.unitPrice = realPrices.get(l.setId);
             l.lineTotal = l.unitPrice * l.portions * employeeCount;
           } else {
-            l.unitPrice = Math.max(0, l.unitPrice);
-            l.lineTotal = Math.max(0, l.lineTotal || l.unitPrice * l.portions * employeeCount);
+            // блюдо не из каталога — цену клиента не берём: владелец видел ложную сумму «на 1 сум» (М-3)
+            l.unitPrice = 0;
+            l.lineTotal = 0;
           }
         }
       }
 
-      const totalAmount = authed
-        ? lines.reduce((s, l) => s + l.lineTotal, 0)
-        : Math.max(0, num(body.totalMonthlyPrice ?? body.totalPrice, 0)) || lines.reduce((s, l) => s + l.lineTotal, 0);
+      // и для заказа, и для заявки — только сумма строк по ценам из БД (М-3)
+      const totalAmount = lines.reduce((s, l) => s + l.lineTotal, 0);
 
       const paymentMethod = PAYMENT_METHODS.has(body.paymentMethod) ? body.paymentMethod : null;
 
@@ -231,7 +249,11 @@ function register(app) {
       // Идемпотентность: повторный клик/ретрай с тем же ключом не создаёт второй заказ.
       const idempotencyKey = nonEmpty(body.idempotencyKey) ? body.idempotencyKey.trim().slice(0, 100) : null;
       if (idempotencyKey) {
-        const existing = await db.one('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
+        // ключ ищем только в своей компании — иначе по чужому ключу видна сумма чужого заказа (М-4)
+        const existing = await db.one(
+          'SELECT * FROM orders WHERE idempotency_key = $1 AND company_id IS NOT DISTINCT FROM $2',
+          [idempotencyKey, companyId],
+        );
         if (existing) {
           return res.status(200).json({
             success: true,
@@ -378,8 +400,9 @@ function register(app) {
     } catch (err) { next(err); }
   });
 
-  // Заказы моей компании
-  app.get('/api/my/orders', auth, async (req, res, next) => {
+  // Заказы моей компании — только менеджеру: у сотрудника в приложении этих экранов нет,
+  // а через API он видел все заказы компании с телефонами (аудит 25.09, В-2)
+  app.get('/api/my/orders', auth, adminOnly, async (req, res, next) => {
     try {
       if (!req.user.company_id) return res.json({ orders: [] });
       const rows = await db.many(
@@ -392,7 +415,7 @@ function register(app) {
     } catch (err) { next(err); }
   });
 
-  app.get('/api/my/orders/:id', auth, async (req, res, next) => {
+  app.get('/api/my/orders/:id', auth, adminOnly, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       const order = Number.isInteger(id) ? await orderWithLines(id) : null;
@@ -405,7 +428,7 @@ function register(app) {
   // было сделать только звонком. Отменять можно, пока кухня ещё не начала
   // готовить (new/confirmed); дальше — только через владельца/звонок.
   const CANCELLABLE = new Set(['new', 'confirmed']);
-  app.post('/api/my/orders/:id/cancel', auth, async (req, res, next) => {
+  app.post('/api/my/orders/:id/cancel', auth, adminOnly, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id заказа' });
@@ -426,7 +449,7 @@ function register(app) {
 
   // Повтор заказа (bug 4d) — та же дата/сет пока не изменились, лишь позже
   // подрежется по offeredSetsByDate, как любой обычный POST /api/orders.
-  app.get('/api/my/orders/:id/repeat-lines', auth, async (req, res, next) => {
+  app.get('/api/my/orders/:id/repeat-lines', auth, adminOnly, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       const order = Number.isInteger(id) ? await orderWithLines(id) : null;

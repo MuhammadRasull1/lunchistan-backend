@@ -133,12 +133,13 @@ async function seed() {
     const existing = await driver.query('SELECT id FROM users WHERE role = $1 LIMIT 1', ['owner']);
     if (existing.rows.length === 0) {
       const { hashPassword } = require('./auth');
-      let company = (await driver.query("SELECT id FROM companies WHERE code = 'LUNCHISTAN'")).rows[0];
-      if (!company) {
-        company = (await driver.query(
-          "INSERT INTO companies (code, name) VALUES ('LUNCHISTAN', 'Lunchistan') RETURNING id",
-        )).rows[0];
-      }
+      // Код — случайный, а не бренд «LUNCHISTAN»: по бренду в компанию владельца вступал кто угодно
+      // (аудит 25.09, В-1). Вход по коду в компанию владельца дополнительно закрыт в routes.js.
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+      const code = Array.from({ length: 8 }, () => chars[require('node:crypto').randomInt(chars.length)]).join('');
+      const company = (await driver.query(
+        "INSERT INTO companies (code, name) VALUES ($1, 'Lunchistan') RETURNING id", [code],
+      )).rows[0];
       await driver.query(
         'INSERT INTO users (company_id, role, name, phone, password_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (phone) DO NOTHING',
         [company.id, 'owner', process.env.OWNER_NAME || 'Владелец', phone, await hashPassword(password)],

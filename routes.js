@@ -1,6 +1,8 @@
 /** Контур «Команды»: регистрация/вход, расписание сотрудника, выбор блюд, сводка и подтверждение менеджера. */
 const crypto = require('node:crypto');
 const db = require('./db');
+const rateLimit = require('./ratelimit');
+const { esc } = require('./telegram');
 const { sendTelegramReceipt } = require('./telegram');
 const {
   MIN_PASSWORD, hashPassword, verifyPassword, isLegacyHash, createSession, destroySession, auth, adminOnly,
@@ -55,37 +57,26 @@ async function snapshotConfirmedDay(t, companyId, date, plan) {
 }
 
 /**
- * Простой rate-limit по IP без внешних зависимостей: код команды — 6 символов
- * из 34-символьного алфавита, без throttling его можно перебрать роботом и
- * "войти" сотрудником в чужую компанию (см. ОШИБКИ.md). Состояние в памяти
- * процесса — сбрасывается при рестарте и не шарится между инстансами, для
- * масштаба этого приложения (один Render-инстанс) этого достаточно.
+ * Rate-limit по IP в БД (ratelimit.js): код команды — 6 символов из 34-символьного
+ * алфавита, без throttling его можно перебрать роботом (см. ОШИБКИ.md). Раньше счётчик
+ * был в памяти процесса — на Cloudflare Worker у каждого изолята свой, почти без защиты
+ * (аудит 25.09.2026, В-3).
  */
-const authAttempts = new Map(); // ip -> число попыток в текущем окне
 const AUTH_WINDOW_MS = 5 * 60 * 1000;
-// Настраивается через env только ради смоук-теста (растущий файл с каждой
-// сессией упирался в дефолт 15 login/register за 5 минут) — прод не трогаем.
+// Настраивается через env только ради смоук-теста — прод не трогаем.
 const AUTH_MAX_ATTEMPTS = Number(process.env.AUTH_MAX_ATTEMPTS) || 15;
-// Раньше окно сбрасывалось таймером setInterval — на верхнем уровне модуля
-// это запрещено рантаймом Cloudflare Workers ("Disallowed operation called
-// within global scope"). Ленивый сброс при первом запросе после AUTH_WINDOW_MS
-// даёт то же поведение (скользящее окно на 5 минут) без глобального таймера,
-// работает одинаково на Render и Workers.
-let authWindowStart = Date.now();
+// Отдельно — неудачные входы в КОНКРЕТНЫЙ аккаунт: перебор пароля с многих IP.
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILS = Number(process.env.LOGIN_MAX_FAILS) || 10;
 
-function authRateLimit(req, res, next) {
-  const now = Date.now();
-  if (now - authWindowStart > AUTH_WINDOW_MS) {
-    authAttempts.clear();
-    authWindowStart = now;
-  }
-  const ip = req.ip || 'unknown';
-  const n = (authAttempts.get(ip) || 0) + 1;
-  authAttempts.set(ip, n);
-  if (n > AUTH_MAX_ATTEMPTS) {
-    return res.status(429).json({ error: 'Слишком много попыток входа/регистрации. Попробуйте через несколько минут.' });
-  }
-  next();
+async function authRateLimit(req, res, next) {
+  try {
+    const n = await rateLimit.hit(`ip:${req.ip || 'unknown'}`, AUTH_WINDOW_MS);
+    if (n > AUTH_MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'Слишком много попыток входа/регистрации. Попробуйте через несколько минут.' });
+    }
+    next();
+  } catch (err) { next(err); }
 }
 
 function requireFields(res, body, fields) {
@@ -127,7 +118,10 @@ function register(app) {
       let role = 'employee';
       if (companyCode) {
         company = await companyByCode(companyCode);
-        if (!company) return res.status(400).json({ error: 'Неверный код команды' });
+        // В компанию владельца по коду не вступить: её код был брендом «LUNCHISTAN», и посторонний
+        // становился сотрудником Lunchistan (аудит 25.09, В-1). Ответ тот же, что на неверный код.
+        const ownersCompany = company && await db.one("SELECT 1 FROM users WHERE company_id = $1 AND role = 'owner'", [company.id]);
+        if (!company || ownersCompany) return res.status(400).json({ error: 'Неверный код команды' });
         // Внутри одной компании имя должно быть уникальным — иначе вход по имени
         // (см. /api/auth/login) не может однозначно понять, кто из двух Иванов
         // logins, и молча выбирает первого попавшегося (см. ОШИБКИ.md).
@@ -162,13 +156,19 @@ function register(app) {
     try {
       const { phone, name, password, companyCode } = req.body || {};
       if (!requireFields(res, { password }, ['password'])) return;
+      const loginKey = `login:${String(phone || name || '').trim().toLowerCase()}`;
+      if ((await rateLimit.peek(loginKey, LOGIN_LOCK_MS)) >= LOGIN_MAX_FAILS) {
+        return res.status(429).json({ error: 'Слишком много неверных попыток для этого аккаунта. Попробуйте через 15 минут.' });
+      }
+      const fail = async () => {
+        await rateLimit.hit(loginKey, LOGIN_LOCK_MS);
+        return res.status(401).json({ error: 'Неверное имя или пароль' });
+      };
 
       let user = null;
       if (phone && String(phone).trim()) {
         user = await db.one('SELECT * FROM users WHERE phone = $1', [String(phone).trim()]);
-        if (!user || !(await verifyPassword(password, user.password_hash))) {
-          return res.status(401).json({ error: 'Неверное имя или пароль' });
-        }
+        if (!user || !(await verifyPassword(password, user.password_hash))) return fail();
       } else if (name && String(name).trim()) {
         // Имя уникально внутри компании, но не между компаниями: «Иван» может
         // работать сразу в нескольких компаниях-клиентах. Сначала сужаем по коду
@@ -196,9 +196,8 @@ function register(app) {
         user = byPassword[0] || null;
       }
 
-      if (!user) {
-        return res.status(401).json({ error: 'Неверное имя или пароль' });
-      }
+      if (!user) return fail();
+      await rateLimit.reset(loginKey);
       // Ленивый перехеш: пользователь ещё на старом scrypt (заведён до
       // 17.09.2026) — раз пароль уже проверен, обновляем хеш на PBKDF2 тут же,
       // без отдельной миграции и без смены пароля пользователем.
@@ -361,8 +360,10 @@ function register(app) {
       if (!emp) return res.status(404).json({ error: 'Сотрудник не найден в вашей команде' });
       // Забыл пароль = потерял аккаунт навсегда (bug 4g) — у сотрудников нет
       // почты для восстановления, только менеджер лично выдаёт новый пароль.
-      const newPassword = crypto.randomBytes(4).toString('hex'); // 8 hex-символов, MIN_PASSWORD=4 хватает с запасом
+      const newPassword = crypto.randomBytes(4).toString('hex'); // 8 hex-символов, MIN_PASSWORD=6 хватает с запасом
       await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(newPassword), id]);
+      // старый пароль мог узнать посторонний — его сессии тоже закрываем (аудит 25.09, М-5)
+      await db.query('DELETE FROM sessions WHERE user_id = $1', [id]);
       res.json({ ok: true, newPassword });
     } catch (err) { next(err); }
   });
@@ -414,12 +415,12 @@ function register(app) {
 
       const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
       const fmt = (x) => x.split('-').reverse().join('.');
-      const lines = plan.perSet.map((s) => `• ${s.setName} × ${s.count} — ${(s.setPrice * s.count).toLocaleString('ru-RU')} UZS`);
+      const lines = plan.perSet.map((s) => `• ${esc(s.setName)} × ${s.count} — ${(s.setPrice * s.count).toLocaleString('ru-RU')} UZS`);
       if (plan.perSet.length === 0) lines.push('— нет запланированных сотрудников');
       const message = [
-        '🍱 *Lunchistan — заказ подтверждён*',
+        '🍱 <b>Lunchistan — заказ подтверждён</b>',
         `📅 ${fmt(date)}`,
-        `🏢 ${company.name}`,
+        `🏢 ${esc(company.name)}`,
         '',
         '🍽 Меню:',
         ...lines,
@@ -455,12 +456,12 @@ function register(app) {
       const plan = await dayPlan(req.user.company_id, date);
       const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
       const fmt = (x) => x.split('-').reverse().join('.');
-      const lines = plan.perSet.map((s) => `• ${s.setName} × ${s.count} — ${(s.setPrice * s.count).toLocaleString('ru-RU')} UZS`);
+      const lines = plan.perSet.map((s) => `• ${esc(s.setName)} × ${s.count} — ${(s.setPrice * s.count).toLocaleString('ru-RU')} UZS`);
       if (plan.perSet.length === 0) lines.push('— нет запланированных сотрудников');
       const message = [
-        '🍱 *Lunchistan — заказ подтверждён (повтор)*',
+        '🍱 <b>Lunchistan — заказ подтверждён (повтор)</b>',
         `📅 ${fmt(date)}`,
-        `🏢 ${company.name}`,
+        `🏢 ${esc(company.name)}`,
         '',
         '🍽 Меню:',
         ...lines,

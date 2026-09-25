@@ -1,6 +1,6 @@
 /** Доставка: расчёт тарифа + сохранение адреса компании. */
 const db = require('./db');
-const { auth } = require('./auth');
+const { auth, adminOnly } = require('./auth');
 const { quote, isFiniteNum } = require('./logistics');
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -36,7 +36,7 @@ function register(app) {
   });
 
   // Сохранение адреса компании (координаты + строка адреса).
-  app.put('/api/my/address', auth, async (req, res, next) => {
+  app.put('/api/my/address', auth, adminOnly, async (req, res, next) => {
     try {
       if (!req.user.company_id) return res.status(403).json({ error: 'Нет компании' });
       const { lat, lon, label } = req.body || {};

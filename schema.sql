@@ -155,6 +155,13 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 
 -- ── Оптовые заказы (основной клиентский поток) и заявки-лиды ────────
+-- Счётчики попыток входа/заявок (ratelimit.js) — общие для всех изолятов Worker (аудит 25.09.2026)
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,
+  window_start BIGINT NOT NULL,
+  n            INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id              SERIAL PRIMARY KEY,
   company_id      INTEGER REFERENCES companies(id) ON DELETE SET NULL,

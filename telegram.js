@@ -1,3 +1,11 @@
+/** Экранирование пользовательского текста для parse_mode HTML. */
+function esc(v) {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Чеки уходят в HTML: раньше был legacy Markdown без экранирования — один «_» в username или
+// названии компании давал 400 «can't parse entities», и кухня не узнавала о заказе (аудит 25.09, В-4).
+// Все пользовательские поля в сообщениях — только через esc().
 async function sendTelegramReceipt(message) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.CHAT_ID;
@@ -18,7 +26,7 @@ async function sendTelegramReceipt(message) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' }),
+    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML', disable_web_page_preview: true }),
   });
 
   const data = await response.json();
@@ -26,4 +34,4 @@ async function sendTelegramReceipt(message) {
   return data;
 }
 
-module.exports = { sendTelegramReceipt };
+module.exports = { sendTelegramReceipt, esc };
