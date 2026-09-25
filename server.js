@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const { isAllowedOrigin } = require('./allowedOrigins');
 
 const db = require('./db');
 const { registerAppRoutes } = require('./appRoutes');
@@ -12,7 +13,8 @@ const app = express();
 // без этого req.ip всегда возвращает IP самого прокси, а не реального клиента,
 // и любой rate-limit по IP (см. routes.js authRateLimit) бьёт по всем сразу.
 app.set('trust proxy', 1);
-app.use(cors());
+// только свои сайты (allowedOrigins.js); запросы без Origin — как раньше
+app.use(cors({ origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin)) }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;

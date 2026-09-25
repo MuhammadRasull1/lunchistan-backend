@@ -14,12 +14,14 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import allowed from '../../allowedOrigins.js';
 import { ExpressLikeApp } from './expressShim.js';
 import { registerAppRoutes } from '../../appRoutes.js';
 import { handleUpdate, remindUpcoming } from './bot.js';
 
 const hono = new Hono();
-hono.use('*', cors());
+// только свои сайты (allowedOrigins.js); без Origin (вебхук Telegram, cron) CORS не участвует
+hono.use('*', cors({ origin: (origin) => (allowed.isAllowedOrigin(origin) ? origin : null) }));
 
 registerAppRoutes(new ExpressLikeApp(hono));
 

@@ -28,7 +28,7 @@ async function send(chatId, text, extra = {}) {
 }
 
 const menuButton = () => JSON.stringify({
-  inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
+  inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan-app.pages.dev' } }]],
 });
 
 // ── Хендлеры команд ────────────────────────────────────────────────

@@ -30,7 +30,7 @@ async function send(chatId, text, extra = {}) {
 }
 
 const menuButton = () => JSON.stringify({
-  inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan.uz' } }]],
+  inline_keyboard: [[{ text: '🍱 Открыть меню', web_app: { url: process.env.TMA_URL || 'https://lunchistan-app.pages.dev' /* lunchistan.uz не существует — кнопка «Открыть меню» вела в пустоту (25.09.2026) */ } }]],
 });
 
 async function handleStart(chatId, user) {

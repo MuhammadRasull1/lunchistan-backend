@@ -1,0 +1,76 @@
+# Сторож прода: раз в 10 минут проверяет API, приложение клиента и кабинет владельца (только GET).
+# Пишет в Telegram один раз при падении и один раз при восстановлении — не каждые 10 минут.
+# Что «было до этого», узнаёт по результату предыдущего прогона этого же workflow.
+name: Watchdog
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: 'Проверить тревогу: притвориться, что API упал'
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Проверка прода
+        id: probe
+        env:
+          WATCHDOG_API: ${{ inputs.simulate_failure && 'https://lunchistan-backend-worker.mansurovsvoyo.workers.dev/simulated-down' || '' }}
+        run: |
+          [ -z "$WATCHDOG_API" ] && unset WATCHDOG_API
+          set +e
+          out=$(bash .github/scripts/watchdog.sh); code=$?
+          echo "$out"
+          { echo 'report<<EOF'; echo "$out"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+          echo "ok=$([ $code = 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+
+      - name: Предыдущий результат
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow watchdog.yml --status completed --limit 1 --json conclusion -q '.[0].conclusion // "success"')
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"; echo "предыдущий прогон: $prev"
+
+      - name: Тревога в Telegram
+        if: steps.probe.outputs.ok == 'no' && steps.prev.outputs.prev != 'failure'
+        env:
+          TOKEN: ${{ secrets.WATCHDOG_BOT_TOKEN }}
+          CHAT: ${{ secrets.WATCHDOG_CHAT_ID }}
+          REPORT: ${{ steps.probe.outputs.report }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id="$CHAT" \
+            --data-urlencode "text=🔴 Lunchistan: прод не отвечает как надо
+          $REPORT
+
+          Следующее сообщение придёт, когда всё восстановится." > /dev/null
+
+      - name: Восстановилось
+        if: steps.probe.outputs.ok == 'yes' && steps.prev.outputs.prev == 'failure'
+        env:
+          TOKEN: ${{ secrets.WATCHDOG_BOT_TOKEN }}
+          CHAT: ${{ secrets.WATCHDOG_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id="$CHAT" \
+            --data-urlencode "text=🟢 Lunchistan: прод снова в порядке." > /dev/null
+
+      - name: Итог прогона
+        if: steps.probe.outputs.ok == 'no'
+        run: exit 1

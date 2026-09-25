@@ -307,6 +307,12 @@ try {
   const cheapLeadRow = cheapLead.data?.orderId && (await api('GET', `/api/owner/orders/${cheapLead.data.orderId}`, null, ownerToken)).data;
   check('сумма заявки не берётся у клиента (М-3)', cheapLead.status === 201 && Number(cheapLeadRow?.totalAmount) === 0, { lead: cheapLead.data, row: cheapLeadRow?.totalAmount });
 
+  const corsHdr = async (origin) => (await fetch(`${BASE}/api/menu`, { headers: { Origin: origin } })).headers.get('access-control-allow-origin');
+  check('CORS: своё приложение получает заголовок (М-7)', (await corsHdr('https://lunchistan-app.pages.dev')) === 'https://lunchistan-app.pages.dev');
+  check('CORS: превью-сборка Core тоже', (await corsHdr('https://c05330d5.lunchistan-core.pages.dev')) === 'https://c05330d5.lunchistan-core.pages.dev');
+  check('CORS: чужой сайт — без заголовка (М-7)', !(await corsHdr('https://evil.example')));
+  check('CORS: поддельный lunchistan-app.pages.dev.evil — без заголовка', !(await corsHdr('https://lunchistan-app.pages.dev.evil.example')));
+
   const noPhone = await api('POST', '/api/auth/register', { name: 'Безномера', password: 'nophone1', companyName: 'Без номера' });
   const noPhoneOrder = await api('POST', '/api/orders', {
     employeeCount: 1, lines: [{ date: futureDate(2), setId: 1, setName: 'Аджахури с курицей', portions: 1 }],
