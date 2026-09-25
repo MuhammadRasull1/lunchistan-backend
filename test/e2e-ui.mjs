@@ -165,6 +165,85 @@ try {
   check('клиент видит «Подтверждён» в кабинете', (await row.count()) > 0);
   await shot(client, '06-client-cabinet');
 
+
+  console.log('\n── «Команды»: менеджер → сотрудник → подтверждение дня → счёт и оплата ──');
+  const onboard = async (page, name, pathIndex, fill) => {
+    await page.goto(CLIENT, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.locator('input').first().fill(name);
+    await page.locator('button.ob-next').click();
+    await page.locator('input[type=password]').fill('pass1234');
+    await page.locator('button.ob-next').click();
+    await page.locator('.ob-path').nth(pathIndex).click();
+    await fill(page.locator('form input:not([type=checkbox])'));
+    await page.locator('label:has(.ob-consent__input)').click();
+    const r = page.waitForResponse((x) => x.url().endsWith('/api/auth/register'));
+    await page.locator('button.ob-next').click();
+    return (await r).status();
+  };
+
+  const mgr = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  current = mgr;
+  mgr.on('pageerror', (e) => pageErrors.push(e.message));
+  check('менеджер создал команду → 201', (await onboard(mgr, 'Менеджер Тест', 1, async (f) => { await f.nth(0).fill('Команда E2E'); })) === 201);
+  await mgr.getByRole('button', { name: 'Кабинет' }).click();
+  await mgr.getByRole('button', { name: 'Команда', exact: true }).click();
+  const codeBtn = mgr.locator('button').filter({ hasText: /^[A-Z0-9]{6}$/ }).first();
+  await codeBtn.waitFor();
+  const teamCode = (await codeBtn.innerText()).trim();
+
+  const emp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  current = emp;
+  emp.on('pageerror', (e) => pageErrors.push(e.message));
+  check('сотрудник вступил по коду → 201', (await onboard(emp, 'Сотрудник Тест', 2, async (f) => { await f.first().fill(teamCode); })) === 201);
+  await emp.getByText('Мои дни').waitFor({ timeout: 10000 }).catch(() => {});
+  check('сотрудник сразу попадает в «Кабинет» с его днями', await emp.getByText('Мои дни').isVisible());
+  await emp.getByRole('button', { name: 'Выбрать дни', exact: true }).first().click();
+  for (const n of weekdays) {
+    const d = new Date(); d.setDate(d.getDate() + n);
+    await emp.locator('button').filter({ hasText: new RegExp(`^${d.getDate()}$`) }).first().click();
+  }
+  const daysSaved = emp.waitForResponse((r) => r.url().endsWith('/api/my/days') && r.request().method() === 'PUT');
+  await emp.getByRole('button', { name: 'Подтвердить' }).click();
+  check('сотрудник сохранил дни → 200', (await daysSaved).status() === 200);
+  const hint = emp.locator('.day-row__hint').first();
+  await hint.waitFor();
+  check('текст дня не сжат в столбик (ширина > 150px)', ((await hint.boundingBox())?.width ?? 0) > 150, await hint.boundingBox());
+  await emp.getByRole('button', { name: 'Выбрать блюдо' }).first().click();
+  const choice = emp.waitForResponse((r) => r.url().includes('/choice') && r.request().method() === 'PUT');
+  await emp.locator('.modal-overlay .set-card:has-text("Бефстроганов")').first().click();
+  check('сотрудник выбрал блюдо → 200', (await choice).status() === 200);
+  await shot(emp, '07-employee-days');
+
+  current = mgr;
+  await mgr.reload({ waitUntil: 'networkidle' });
+  await mgr.getByRole('button', { name: 'Кабинет' }).click();
+  await mgr.getByRole('button', { name: 'Команда', exact: true }).click();
+  await mgr.getByText('Сотрудник Тест').first().waitFor();
+  check('у сотрудника не показан служебный user_…', (await mgr.getByText(/^user_/).count()) === 0);
+  await mgr.getByRole('button', { name: 'Подтвердить заказ на день' }).first().click();
+  const confirmed = mgr.waitForResponse((r) => r.url().includes('/confirm'));
+  await mgr.getByRole('button', { name: 'Подтвердить заказ на день', exact: true }).last().click();
+  check('менеджер подтвердил день → 201', (await confirmed).status() === 201);
+  await sleep(1500);
+  check('после подтверждения нет белого экрана', (await mgr.getByText('День подтверждён').count()) > 0);
+  check('без бота честно: «чек в Telegram не ушёл»', (await mgr.getByText(/не ушёл/).count()) > 0);
+  await shot(mgr, '08-manager-confirmed');
+
+  current = core;
+  await core.reload({ waitUntil: 'networkidle' });
+  await core.getByRole('button', { name: 'Счета и оплаты' }).click();
+  await core.getByText('Команда E2E').first().waitFor();
+  await core.getByRole('button', { name: 'Внести оплату' }).last().click();
+  await core.locator('input').first().fill('55000');
+  await core.getByRole('button', { name: 'Карта', exact: true }).click();
+  const paid = core.waitForResponse((r) => r.url().includes('/payments'));
+  await core.getByRole('button', { name: 'Записать оплату' }).click();
+  const paidRes = await paid;
+  const paidData = await paidRes.json();
+  check('владелец записал полную оплату → счёт paid', paidRes.status() === 200 && paidData.status === 'paid' && paidData.unpaidAmount === 0, paidData);
+  await shot(core, '09-core-invoice-paid');
+
   check('нет JS-ошибок на страницах', pageErrors.length === 0, pageErrors.slice(0, 3));
 } catch (err) {
   failed++;
