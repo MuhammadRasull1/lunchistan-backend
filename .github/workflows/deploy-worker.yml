@@ -1,0 +1,59 @@
+# Автодеплой прод-бэкенда (Cloudflare Worker) при пуше в main.
+# Раньше после каждого мержа нужен был ручной `cd cloudflare && npx wrangler deploy` — его легко забыть.
+# Сначала смоук-тест на локальном PGlite; Worker выкатывается, только если тест прошёл.
+# Пока в репозитории нет секрета CLOUDFLARE_API_TOKEN — деплой пропускается (зелёным, без ошибки).
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cloudflare/package-lock.json
+
+      - name: Смоук-тест (PGlite)
+        run: |
+          npm ci
+          npm test
+
+      - name: Есть ли токен Cloudflare
+        id: token
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_TOKEN" ]; then echo "present=yes" >> "$GITHUB_OUTPUT"; else
+            echo "::notice::CLOUDFLARE_API_TOKEN не задан — деплой пропущен"; echo "present=no" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Деплой Worker
+        if: steps.token.outputs.present == 'yes'
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ef6bc61e4d6c131bd0e973fb76558850
+        run: |
+          npm ci
+          npx wrangler deploy
+
+      - name: Проверка прода после деплоя
+        if: steps.token.outputs.present == 'yes'
+        run: |
+          for path in /api/menu /api/settings; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://lunchistan-backend-worker.mansurovsvoyo.workers.dev$path")
+            echo "$path → $code"; [ "$code" = 200 ] || exit 1
+          done
