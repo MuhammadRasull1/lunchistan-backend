@@ -176,10 +176,26 @@ function register(app) {
   app.post('/api/owner/orders/:id/status', auth, ownerOnly, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Неверный id заказа' });
       const { status, note } = req.body || {};
       if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Неизвестный статус' });
-      const order = await db.one('SELECT * FROM orders WHERE id = $1', [id]);
+      const orders = await db.many('SELECT * FROM orders WHERE id = $1 LIMIT 1', [id]);
+      const order = orders[0] ?? null;
       if (!order) return res.status(404).json({ error: 'Заказ не найден' });
+      // Запрещаем нелогичные переходы: нельзя вернуть уже оплаченный или
+      // отменённый заказ в начальные статусы
+      const ALLOWED_FROM = {
+        new: STATUSES,
+        confirmed: STATUSES,
+        in_progress: STATUSES,
+        delivered: STATUSES,
+        paid: ['paid', 'cancelled'], // оплаченный — только отмена и повтор paid
+        cancelled: ['cancelled'],   // отменённый — финальный
+      };
+      const allowed = ALLOWED_FROM[order.status] ?? STATUSES;
+      if (!allowed.includes(status)) {
+        return res.status(409).json({ error: `Нельзя перейти из "${order.status}" в "${status}"` });
+      }
 
       await db.tx(async (t) => {
         await t.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [status, id]);
@@ -187,6 +203,7 @@ function register(app) {
           [id, status, typeof note === 'string' ? note : null, req.user.id]);
       });
 
+      const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       if (status === 'confirmed' || status === 'cancelled') {
         try {
           await sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} → <b>${esc(status)}</b>${note ? `\n${esc(note)}` : ''}`);
@@ -195,7 +212,6 @@ function register(app) {
       // Раньше клиент вообще не узнавал о смене статуса — только владелец
       // (аудит 12.09, bug 4b). Пишем ему в личку тем же ботом, что и чек заказа.
       if (order.tg_user_id) {
-        const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const label = STATUS_LABELS[status] || status;
         const text = [
           `🔔 <b>Заказ ORD-${String(id).padStart(4, '0')}</b>`,
@@ -242,7 +258,7 @@ function register(app) {
       const { amount, method, note } = req.body || {};
       const amountInt = Number(amount);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'Неверный id счёта' });
-      if (!Number.isFinite(amountInt) || amountInt <= 0) return res.status(400).json({ error: 'Поле "amount" должно быть положительным числом' });
+      if (!Number.isInteger(amountInt) || amountInt <= 0) return res.status(400).json({ error: 'Поле "amount" должно быть положительным целым числом (сумы без копеек)' });
       const invoice = await db.one('SELECT * FROM invoices WHERE id = $1', [id]);
       if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
 

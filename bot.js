@@ -137,7 +137,12 @@ async function poll() {
   try {
     const res = await fetch(`${API}/getUpdates?offset=${offset}&timeout=30`);
     const data = await res.json();
-    if (data.ok && data.result?.length) {
+    if (!data.ok) {
+      // ok:false — чаще всего вебхук уже установлен (409) или токен невалиден.
+      // Немедленная рекурсия при этом создаёт бесконечный цикл: ждём перед следующим опросом.
+      console.error('poll: Telegram error', data.error_code, data.description);
+      await new Promise(r => setTimeout(r, 5000));
+    } else if (data.result?.length) {
       for (const u of data.result) {
         offset = u.update_id + 1;
         await processUpdate(u).catch(console.error);
@@ -145,6 +150,8 @@ async function poll() {
     }
   } catch (e) {
     console.error('poll error:', e.message);
+    // Сетевая ошибка — пауза чтобы не спамить
+    await new Promise(r => setTimeout(r, 3000));
   }
   poll(); // рекурсия
 }

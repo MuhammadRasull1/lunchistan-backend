@@ -51,7 +51,14 @@ async function snapshotConfirmedDay(t, companyId, date, plan) {
     `INSERT INTO invoices (company_id, period_start, period_end, total_amount)
      VALUES ($1,$2,$3,$4)
      ON CONFLICT (company_id, period_start, period_end)
-     DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()`,
+     DO UPDATE SET
+       total_amount = EXCLUDED.total_amount,
+       -- Если сумма выросла после оплаты, снимаем статус paid — иначе долг остаётся скрытым
+       status = CASE
+         WHEN invoices.status = 'paid' AND EXCLUDED.total_amount > invoices.total_amount THEN 'partial'
+         ELSE invoices.status
+       END,
+       updated_at = now()`,
     [companyId, start, end, totalRow.total],
   );
 }
@@ -268,15 +275,20 @@ function register(app) {
       const existing = (await db.many('SELECT date FROM schedule WHERE user_id = $1', [req.user.id])).map((r) => dateKey(r.date));
       const existingSet = new Set(existing);
       const keep = new Set(clean);
-      // Реально меняются только даты, которых не было и теперь есть, или были и пропали —
-      // неизменную часть расписания (в т.ч. today после 10:00) трогать не запрещаем.
-      const changedDates = [...new Set([...clean.filter((d) => !existingSet.has(d)), ...existing.filter((d) => !keep.has(d))])];
+      // Фронт отфильтровывает прошедшие/закрытые даты перед отправкой — они исчезают из keep,
+      // но удалять их не нужно. Сравниваем только изменяемые даты.
+      const mutableExisting = existing.filter((d) => !isLockedDate(d));
+      const changedDates = [...new Set([
+        ...clean.filter((d) => !existingSet.has(d)),         // добавляются
+        ...mutableExisting.filter((d) => !keep.has(d)),      // удаляются (только незакрытые)
+      ])];
       for (const date of changedDates) {
-        // Дедлайн 10:00 действовал только на выбор блюда, не на само расписание —
-        // можно было добавить/убрать себя из плана дня после дедлайна (см. ОШИБКИ.md).
-        if (isLockedDate(date)) return res.status(409).json({ error: `Дата "${date}" уже закрыта для изменений (дедлайн 10:00)` });
         if (await isDayConfirmed(req.user.company_id, date)) {
           return res.status(409).json({ error: `День "${date}" уже подтверждён менеджером, расписание не меняется` });
+        }
+        // Новые добавления не должны быть в прошлом
+        if (!existingSet.has(date) && isLockedDate(date)) {
+          return res.status(400).json({ error: `Дата "${date}" недоступна для записи (дедлайн 10:00)` });
         }
       }
 
@@ -285,7 +297,8 @@ function register(app) {
           await t.query('INSERT INTO schedule (user_id, date) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, date]);
         }
         for (const date of existing) {
-          if (!keep.has(date)) {
+          // Закрытые и подтверждённые даты не удаляем — фронт просто не присылает их обратно
+          if (!keep.has(date) && !isLockedDate(date)) {
             await t.query('DELETE FROM schedule WHERE user_id = $1 AND date = $2', [req.user.id, date]);
             await t.query('DELETE FROM choices WHERE user_id = $1 AND date = $2', [req.user.id, date]);
           }

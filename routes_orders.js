@@ -39,11 +39,12 @@ function extractLines(body) {
     }));
 }
 
-/** Реальные цены блюд из БД по setId (единственный источник правды — не то, что прислал клиент). */
+/** Реальные цены блюд из БД по setId — только активных (is_active=true). */
 async function pricesForSetIds(setIds) {
   const ids = [...new Set(setIds.filter((id) => Number.isInteger(id)))];
   if (!ids.length) return new Map();
-  const rows = await db.many('SELECT id, price FROM menu_sets WHERE id = ANY($1)', [ids]);
+  // is_active=false — блюдо снято с продажи; его цена недоступна клиентам
+  const rows = await db.many('SELECT id, price FROM menu_sets WHERE id = ANY($1) AND is_active = true', [ids]);
   return new Map(rows.map((r) => [r.id, Number(r.price)]));
 }
 
@@ -332,8 +333,13 @@ function register(app) {
         // Гонка двойного клика: обе попытки прошли проверку "нет такого ключа"
         // до того, как первая закоммитилась — вторая словит нарушение уникальности.
         if (idempotencyKey && err.code === '23505') {
-          const existing = await db.one('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
-          if (existing) {
+          // Фильтруем по company_id чтобы коллизия чужого ключа не вернула данные другой компании
+          const rows = await db.many(
+            'SELECT * FROM orders WHERE idempotency_key = $1 AND company_id = $2 LIMIT 1',
+            [idempotencyKey, companyId],
+          );
+          const existing = rows[0] ?? null;
+          if (existing != null) {
             return res.status(200).json({
               success: true,
               orderId: existing.id,
