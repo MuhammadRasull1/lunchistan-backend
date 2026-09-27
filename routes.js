@@ -416,7 +416,12 @@ function register(app) {
     try {
       const date = req.params.date;
       if (!isDateString(date)) return res.status(400).json({ error: 'Дата должна быть в формате YYYY-MM-DD' });
-      if (isLockedDate(date)) return res.status(409).json({ error: 'Этот день уже закрыт' });
+      // Сегодняшний день подтверждать можно и после 10:00 (дедлайн только для сотрудников),
+      // иначе забытый день навсегда оставался без счёта и чека на кухню.
+      if (date < todayTz()) return res.status(409).json({ error: 'Этот день уже прошёл' });
+      if (!(await dayMenuSets(date)).length) {
+        return res.status(409).json({ error: 'На этот день не назначено меню — сначала владелец вносит меню' });
+      }
       const already = await db.one('SELECT 1 FROM confirmed_days WHERE company_id = $1 AND date = $2', [req.user.company_id, date]);
       if (already) return res.status(409).json({ error: 'День уже подтверждён' });
 
