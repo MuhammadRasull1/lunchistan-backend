@@ -426,10 +426,16 @@ function register(app) {
       if (already) return res.status(409).json({ error: 'День уже подтверждён' });
 
       const plan = await dayPlan(req.user.company_id, date);
-      await db.tx(async (t) => {
-        await t.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
-        await snapshotConfirmedDay(t, req.user.company_id, date, plan);
-      });
+      try {
+        await db.tx(async (t) => {
+          await t.query('INSERT INTO confirmed_days (company_id, date, confirmed_by) VALUES ($1,$2,$3)', [req.user.company_id, date, req.user.id]);
+          await snapshotConfirmedDay(t, req.user.company_id, date, plan);
+        });
+      } catch (e) {
+        // Двойной клик: второй запрос проходит проверку already и падает на PK — это 409, не 500
+        if (e.code === '23505') return res.status(409).json({ error: 'День уже подтверждён' });
+        throw e;
+      }
 
       const company = await db.one('SELECT * FROM companies WHERE id = $1', [req.user.company_id]);
       const fmt = (x) => x.split('-').reverse().join('.');

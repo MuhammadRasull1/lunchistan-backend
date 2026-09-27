@@ -55,7 +55,7 @@ function register(app) {
       // платежей, и SUM(total_amount) через JOIN задвоился бы по числу платежей.
       const korMoney = await db.one(`
         SELECT
-          COALESCE((SELECT SUM(total_amount) FROM invoices), 0)::bigint AS invoiced,
+          COALESCE((SELECT SUM(total_amount) FROM invoices WHERE status <> 'cancelled'), 0)::bigint AS invoiced,
           COALESCE((SELECT SUM(amount) FROM payments), 0)::bigint AS paid`);
       const korInvoiced = Number(korMoney.invoiced);
       const korPaid = Number(korMoney.paid);
@@ -263,6 +263,7 @@ function register(app) {
       if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
 
       await db.tx(async (t) => {
+        await t.query('SELECT id FROM invoices WHERE id = $1 FOR UPDATE', [id]);
         await t.query('INSERT INTO payments (invoice_id, amount, method, note) VALUES ($1,$2,$3,$4)',
           [id, amountInt, typeof method === 'string' ? method : null, typeof note === 'string' ? note : null]);
         const totalPaid = await t.one('SELECT COALESCE(SUM(amount),0)::bigint AS s FROM payments WHERE invoice_id = $1', [id]);

@@ -50,13 +50,17 @@ jobs:
           echo "prev=$prev" >> "$GITHUB_OUTPUT"; echo "предыдущий прогон: $prev"
 
       - name: Тревога в Telegram
+        id: alert
+        continue-on-error: true
         if: steps.probe.outputs.ok == 'no' && steps.prev.outputs.prev != 'failure'
         env:
           TOKEN: ${{ secrets.WATCHDOG_BOT_TOKEN }}
           CHAT: ${{ secrets.WATCHDOG_CHAT_ID }}
           REPORT: ${{ steps.probe.outputs.report }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id="$CHAT" \
+          # --fail: если тревога не ушла, шаг падает, и прогон не помечается failure (см. «Итог») —
+          # иначе следующие прогоны считали бы, что тревога уже отправлена, и молчали
+          curl -sf --retry 3 -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id="$CHAT" \
             --data-urlencode "text=🔴 Lunchistan: прод не отвечает как надо
           $REPORT
 
@@ -72,5 +76,5 @@ jobs:
             --data-urlencode "text=🟢 Lunchistan: прод снова в порядке." > /dev/null
 
       - name: Итог прогона
-        if: steps.probe.outputs.ok == 'no'
+        if: steps.probe.outputs.ok == 'no' && steps.alert.outcome != 'failure'
         run: exit 1
