@@ -96,7 +96,7 @@ async function companyByCode(code) {
 /** Финальный план дня «Команд»: сотрудники компании, запланированные на дату, + их выбор (невыбравшие → сет-дефолт). */
 async function dayPlan(companyId, date) {
   const employees = await db.many(
-    "SELECT id, name FROM users WHERE company_id = $1 AND role = 'employee' ORDER BY name",
+    "SELECT id, name FROM users WHERE company_id = $1 AND role IN ('employee','admin') ORDER BY name",
     [companyId],
   );
   const scheduledRows = await db.many(
@@ -121,8 +121,11 @@ async function dayPlan(companyId, date) {
     const ch = choiceMap.get(emp.id);
     let set;
     let fromDefault = false;
-    if (ch) {
-      set = await getSet(ch.set_id);
+    // Выбранное блюдо считаем по цене на момент выбора и только если оно ещё в меню дня;
+    // иначе (владелец снял блюдо) — как невыбравший, по дефолту.
+    const offered = ch && menuSets.find((s) => s.id === ch.set_id);
+    if (offered) {
+      set = { ...offered, price: Number(ch.set_price) };
     } else {
       set = defaultSet;
       fromDefault = true;
@@ -131,8 +134,9 @@ async function dayPlan(companyId, date) {
     // такая строка не должна попадать в подсчёт сумм/агрегатов по блюдам.
     rows.push({ employeeId: emp.id, employeeName: emp.name, set: set || null, chosen: Boolean(ch), fromDefault });
     if (!set) continue;
-    const agg = bySet.get(set.id) || { setId: set.id, setName: set.name, setPrice: set.price, count: 0, defaults: 0, employees: [] };
+    const agg = bySet.get(set.id) || { setId: set.id, setName: set.name, setPrice: set.price, count: 0, sum: 0, defaults: 0, employees: [] };
     agg.count += 1;
+    agg.sum += set.price;
     if (fromDefault) agg.defaults += 1;
     agg.employees.push(emp.name);
     bySet.set(set.id, agg);
@@ -143,7 +147,20 @@ async function dayPlan(companyId, date) {
     [companyId, date],
   );
   const confirmed = Boolean(confirmedRow);
-  const perSet = [...bySet.values()].sort((a, b) => b.count - a.count);
+  let perSet = [...bySet.values()].sort((a, b) => b.count - a.count);
+  let totalSum = rows.filter((r) => r.set).reduce((s, r) => s + r.set.price, 0);
+  if (confirmed) {
+    // После подтверждения отчёт и повторный чек — из снимка, чтобы совпадали со счётом
+    const lines = await db.many(
+      'SELECT set_id, set_name, set_price, count, line_total FROM confirmed_day_lines WHERE company_id = $1 AND date = $2 ORDER BY count DESC',
+      [companyId, date],
+    );
+    perSet = lines.map((l) => ({
+      setId: l.set_id, setName: l.set_name, setPrice: Number(l.set_price), count: l.count,
+      sum: Number(l.line_total), defaults: bySet.get(l.set_id)?.defaults ?? 0, employees: bySet.get(l.set_id)?.employees ?? [],
+    }));
+    totalSum = perSet.reduce((s, l) => s + l.sum, 0);
+  }
 
   return {
     date,
@@ -152,7 +169,7 @@ async function dayPlan(companyId, date) {
     totalEmployees: employees.length,
     scheduled: rows.length,
     unpicked: rows.filter((r) => !r.chosen).length,
-    totalSum: rows.filter((r) => r.set).reduce((s, r) => s + r.set.price, 0),
+    totalSum,
     perSet,
     rows,
   };

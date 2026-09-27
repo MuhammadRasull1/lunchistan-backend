@@ -39,7 +39,7 @@ async function snapshotConfirmedDay(t, companyId, date, plan) {
        ON CONFLICT (company_id, date, set_id) DO UPDATE SET
          set_name = EXCLUDED.set_name, set_price = EXCLUDED.set_price,
          count = EXCLUDED.count, line_total = EXCLUDED.line_total`,
-      [companyId, date, s.setId, s.setName, s.setPrice, s.count, s.setPrice * s.count],
+      [companyId, date, s.setId, s.setName, s.setPrice, s.count, s.sum ?? s.setPrice * s.count],
     );
   }
   const { start, end } = monthBounds(date);

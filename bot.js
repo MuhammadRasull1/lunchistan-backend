@@ -24,7 +24,9 @@ async function send(chatId, text, extra = {}) {
   if (res) {
     const data = await res.json().catch(() => null);
     if (data && !data.ok) console.error('Telegram API reply:', JSON.stringify(data).slice(0, 300));
+    return Boolean(data && data.ok);
   }
+  return false;
 }
 
 const menuButton = () => JSON.stringify({
@@ -91,6 +93,9 @@ function dayKeyShift(n) {
 
 async function remindUpcoming() {
   if (!TOKEN) return;
+  // Cron каждый час, а «завтра» меняется в 00:00 по Ташкенту — напоминания уходили ночью.
+  // Шлём только вечером накануне (18:00+ Ташкент).
+  if (new Date(Date.now() + 5 * 3600000).getUTCHours() < 18) return;
   const tomorrow = dayKeyShift(1);
   const rows = await db.many(
     `SELECT DISTINCT o.id, o.tg_user_id, o.total_amount
@@ -105,13 +110,14 @@ async function remindUpcoming() {
 
   for (const r of rows) {
     const sum = Number(r.total_amount).toLocaleString('ru-RU');
-    await send(r.tg_user_id,
+    const ok = await send(r.tg_user_id,
       `🌤 <b>Напоминание</b>: завтра у вас доставка <b>Lunchistan</b>! 🍱\n\n` +
       `🔖 №ORD-${String(r.id).padStart(4, '0')}\n` +
       `💰 ${sum} UZS\n\n` +
       `Если планы изменились — напишите нам заранее. Хорошего дня! ✨`,
       { reply_markup: menuButton() },
     );
+    if (!ok) continue; // не доставлено — попробуем в следующий час
     await db.query(
       'INSERT INTO delivery_reminders (order_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [r.id, tomorrow],

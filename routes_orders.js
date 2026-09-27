@@ -149,6 +149,12 @@ async function orderWithLines(id) {
     paymentMethod: order.payment_method,
     employeeCount: order.employee_count,
     totalAmount: Number(order.total_amount),
+    // Доставку и точку раньше не видел владелец (аудит 27.09)
+    deliveryFee: Number(order.delivery_fee) || 0,
+    totalWithDelivery: Number(order.total_amount) + (Number(order.delivery_fee) || 0),
+    destLat: order.dest_lat ?? null,
+    destLon: order.dest_lon ?? null,
+    destDetail: order.dest_detail ?? null,
     createdAt: order.created_at,
     lines: lines.map((l) => ({
       date: dateKey(l.date),
@@ -443,11 +449,18 @@ function register(app) {
       if (!CANCELLABLE.has(order.status)) {
         return res.status(409).json({ error: `Заказ уже "${order.status}" — отменить самостоятельно нельзя, свяжитесь с нами` });
       }
-      await db.tx(async (t) => {
-        await t.query("UPDATE orders SET status = 'cancelled', updated_at = now() WHERE id = $1", [id]);
+      // Статус проверяем в самом UPDATE: владелец мог сменить его между SELECT и отменой
+      const done = await db.tx(async (t) => {
+        const upd = await t.query(
+          "UPDATE orders SET status = 'cancelled', updated_at = now() WHERE id = $1 AND status = ANY($2) RETURNING id",
+          [id, [...CANCELLABLE]],
+        );
+        if (!upd.rows.length) return false;
         await t.query('INSERT INTO order_status_log (order_id, status, note, changed_by) VALUES ($1,$2,$3,$4)',
           [id, 'cancelled', 'Отменён клиентом', req.user.id]);
+        return true;
       });
+      if (!done) return res.status(409).json({ error: 'Статус заказа только что изменился — обновите страницу' });
       sendTelegramReceipt(`🔔 Заказ ORD-${String(id).padStart(4, '0')} отменён клиентом`).catch(() => {});
       res.json(await orderWithLines(id));
     } catch (err) { next(err); }

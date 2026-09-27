@@ -43,8 +43,8 @@ function register(app) {
 
       const money = await db.one(`
         SELECT
-          COALESCE(SUM(total_amount) FILTER (WHERE is_lead = false AND status <> 'cancelled'), 0)::bigint AS ordered,
-          COALESCE(SUM(total_amount) FILTER (WHERE is_lead = false AND status = 'paid'), 0)::bigint AS paid
+          COALESCE(SUM(total_amount + delivery_fee) FILTER (WHERE is_lead = false AND status <> 'cancelled'), 0)::bigint AS ordered,
+          COALESCE(SUM(total_amount + delivery_fee) FILTER (WHERE is_lead = false AND status = 'paid'), 0)::bigint AS paid
         FROM orders`);
       const ordered = Number(money.ordered);
       const paid = Number(money.paid);

@@ -21,7 +21,10 @@ const INVALID_JSON = Symbol('invalid-json');
 async function buildReq(c) {
   let body = {};
   const method = c.req.method;
-  if (method !== 'GET' && method !== 'HEAD') {
+  // Как express.json(): тело читаем только при application/json. Иначе сторонняя страница
+  // могла слать text/plain без CORS-preflight, и Worker принимал это как JSON (аудит 27.09).
+  const isJson = /^application\/(.+\+)?json/i.test(c.req.header('content-type') || '');
+  if (method !== 'GET' && method !== 'HEAD' && isJson) {
     const text = await c.req.text();
     if (text && text.trim()) {
       try {
