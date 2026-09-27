@@ -69,7 +69,11 @@ function register(app) {
         WHERE o.is_lead = false AND o.status <> 'cancelled'
           AND ol.date BETWEEN $1 AND $2
         GROUP BY ol.date, ol.set_name
-        ORDER BY ol.date, portions DESC`, [from, to]);
+        UNION ALL
+        SELECT date::text, set_name, SUM(count)::int, SUM(line_total)::bigint
+        FROM confirmed_day_lines WHERE date BETWEEN $1 AND $2
+        GROUP BY date, set_name
+        ORDER BY 1, 3 DESC`, [from, to]);
 
       const byDateMap = new Map();
       for (const r of kitchenRows) {
@@ -127,6 +131,12 @@ function register(app) {
         WHERE o.is_lead = false AND o.status <> 'cancelled' AND ol.date = $1
         GROUP BY ol.set_name, ol.beverage, ol.salad, ol.excluded, o.company_name
         ORDER BY portions DESC`, [date]);
+      // «Команды»: подтверждённые дни — из снимка (салат/напиток там не выбираются)
+      const kor = await db.many(`
+        SELECT l.set_name, NULL AS beverage, NULL AS salad, NULL AS excluded, l.count AS portions, c.name AS company_name
+        FROM confirmed_day_lines l JOIN companies c ON c.id = l.company_id
+        WHERE l.date = $1 ORDER BY l.count DESC`, [date]);
+      bulk.push(...kor);
 
       const totalPortions = bulk.reduce((s, r) => s + r.portions, 0);
       res.json({

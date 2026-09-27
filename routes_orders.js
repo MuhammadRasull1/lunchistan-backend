@@ -271,7 +271,7 @@ function register(app) {
             telegramSent: true, // уже был отправлен при первом (реальном) создании
             deliveryFee: Number(existing.delivery_fee) || 0,
             deliveryZone: null,
-            totalWithDelivery: Number(existing.total_amount),
+            totalWithDelivery: Number(existing.total_amount) + (Number(existing.delivery_fee) || 0),
           });
         }
       }
@@ -355,7 +355,7 @@ function register(app) {
               telegramSent: true,
               deliveryFee: Number(existing.delivery_fee) || 0,
               deliveryZone: null,
-              totalWithDelivery: Number(existing.total_amount),
+              totalWithDelivery: Number(existing.total_amount) + (Number(existing.delivery_fee) || 0),
             });
           }
         }
