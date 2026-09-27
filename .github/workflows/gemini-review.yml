@@ -1,0 +1,24 @@
+name: Gemini review
+# Бесплатная автопроверка каждого push в main: комментарий к коммиту с подозрениями.
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write   # нужен для комментария к коммиту
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node .github/scripts/gemini-review.mjs
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          BEFORE: ${{ github.event.before }}
