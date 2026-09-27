@@ -6,7 +6,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const os = require('node:os');
-const { Client } = require('pg');
+const { Client, types } = require('pg');
+// DATE и TIMESTAMP без пояса — сырой строкой, иначе pg делает из них JS Date в поясе ПК (Ташкент +5)
+// и при восстановлении на сервере в UTC дата уезжает на день назад.
+types.setTypeParser(1082, v => v);   // date
+types.setTypeParser(1114, v => v);   // timestamp without time zone
 
 const DIR = process.env.BACKUP_DIR || path.join(os.homedir(), 'lunchistan-backups');
 const KEEP = Number(process.env.BACKUP_KEEP || 30);
@@ -40,5 +44,16 @@ const KEEP = Number(process.env.BACKUP_KEEP || 30);
   old.forEach(f => fs.unlinkSync(path.join(DIR, f)));
 
   const counts = Object.entries(dump.tables).map(([t, r]) => `${t}:${r.length}`).join(' ');
-  console.log(`✅ ${file}\n   ${counts}${old.length ? `\n   удалено старых: ${old.length}` : ''}`);
-})().catch(e => { console.error('❌ бэкап не удался:', e.message); process.exit(1); });
+  // сразу проверяем, что копия восстанавливается один в один (иначе это не бэкап)
+  require('node:child_process').execFileSync(process.execPath, [path.join(__dirname, 'restore-check.js'), file], { stdio: 'pipe' });
+  try { fs.unlinkSync(path.join(DIR, 'ОШИБКА-БЭКАПА.txt')); } catch {}
+  console.log(`✅ ${file} (восстановление проверено)\n   ${counts}${old.length ? `\n   удалено старых: ${old.length}` : ''}`);
+})().catch(e => {
+  const msg = `Бэкап Lunchistan не удался ${new Date().toLocaleString('ru-RU')}: ${(e.stdout || '') + e.message}`.slice(0, 500);
+  console.error('❌', msg);
+  // громко: файл-метка в папке копий + уведомление на рабочий стол (cron сам по себе молчит)
+  try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(path.join(DIR, 'ОШИБКА-БЭКАПА.txt'), msg + '\n'); } catch {}
+  try { require('node:child_process').execFileSync('notify-send', ['-u', 'critical', 'Lunchistan: бэкап не удался', msg],
+    { env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${process.getuid()}/bus` } }); } catch {}
+  process.exit(1);
+});
