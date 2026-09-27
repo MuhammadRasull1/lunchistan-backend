@@ -2,25 +2,25 @@
 // комментарий к коммиту с подозрениями (file:line). Ничего не блокирует — всегда exit 0.
 // Находки — гипотезы: перед правкой их проверяют по коду.
 import fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const { GEMINI_API_KEY: KEY, GITHUB_TOKEN, GITHUB_REPOSITORY: REPO, SHA, BEFORE } = process.env;
 const MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite'];
 const CODE = /\.(js|mjs|cjs|ts|tsx|jsx|sql)$/i;
 const SKIP = /(^|\/)(node_modules|dist|\.wrangler)\/|lock\.json$|\.min\.js$|(^|\/)\.env/i;
 
+const BASE = BEFORE && !/^0+$/.test(BEFORE) ? BEFORE : `${SHA}~1`;
+// execFileSync с массивом аргументов — имена файлов не проходят через shell
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 26 });
 function changedFiles() {
-  const base = BEFORE && !/^0+$/.test(BEFORE) ? BEFORE : `${SHA}~1`;
-  try {
-    return execSync(`git diff --name-only --diff-filter=AM ${base} ${SHA}`, { encoding: 'utf8' }).split('\n');
-  } catch { return []; }
+  try { return git('diff', '--name-only', '--diff-filter=AM', BASE, SHA).split('\n'); } catch { return []; }
 }
 
 async function main() {
   if (!KEY) { console.log('GEMINI_API_KEY не задан — пропуск'); return; }
   const files = changedFiles().filter((f) => f && CODE.test(f) && !SKIP.test(f) && fs.existsSync(f));
   if (!files.length) { console.log('нет изменённого кода'); return; }
-  const diff = execSync(`git diff -U0 ${BEFORE && !/^0+$/.test(BEFORE) ? BEFORE : `${SHA}~1`} ${SHA} -- ${files.map((f) => `'${f}'`).join(' ')}`, { encoding: 'utf8', maxBuffer: 1 << 26 }).slice(0, 200_000);
+  const diff = git('diff', '-U0', BASE, SHA, '--', ...files).slice(0, 200_000);
   let code = '';
   for (const f of files) {
     const t = fs.readFileSync(f, 'utf8');
