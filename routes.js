@@ -55,7 +55,7 @@ async function snapshotConfirmedDay(t, companyId, date, plan) {
        total_amount = EXCLUDED.total_amount,
        -- Если сумма выросла после оплаты, снимаем статус paid — иначе долг остаётся скрытым
        status = CASE
-         WHEN invoices.status = 'paid' AND EXCLUDED.total_amount > invoices.total_amount THEN 'partial'
+         WHEN invoices.status = 'paid' AND EXCLUDED.total_amount > invoices.total_amount THEN 'open'
          ELSE invoices.status
        END,
        updated_at = now()`,
