@@ -63,3 +63,8 @@ npm test           # смоук-тест всех эндпойнтов на вр
 - `GET /api/owner/kitchen?date=` — что и сколько готовить на дату
 - `GET /api/owner/orders?status&leads`, `GET /api/owner/orders/:id`
 - `POST /api/owner/orders/:id/status` — `{status, note}` (`new|confirmed|in_progress|delivered|paid|cancelled`)
+
+## Резервные копии базы
+- `node scripts/backup.js` — снимок всех таблиц (только чтение) в `~/lunchistan-backups/lunchistan-<дата>.json.gz`, хранится 30 последних. В git НЕ класть — там личные данные.
+- Автозапуск: cron на ПК каждые 3 ч, делает копию не чаще раза в 20 ч (`BACKUP_MIN_HOURS=20`), лог — `~/lunchistan-backups/backup.log`.
+- Восстановление: `RESTORE_CONFIRM=yes node scripts/restore.js <файл>` — в базу из `DATABASE_URL`, а без неё — в локальный PGlite (так и проверять: восстановление 27.09 на пустой PGlite совпало по всем 17 таблицам).
